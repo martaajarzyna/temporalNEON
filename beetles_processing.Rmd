@@ -1,0 +1,49 @@
+---
+title: "NEON download"
+author: "Kari Norman"
+date: "10/15/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(neonUtilities)
+```
+
+Download 
+```{r}
+beetles <- loadByProduct("DP1.10022.001", check.size = FALSE)
+
+data <- beetles$bet_expertTaxonomistIDProcessed %>%
+  select(uid, domainID, siteID, plotID, setDate, collectDate, taxonID, family, subfamily, scientificName) %>%
+  mutate(year = lubridate::year(collectDate), 
+                month = lubridate::month(collectDate), 
+                day = lubridate::day(collectDate))
+```
+
+How many sites?
+How many plots?
+How many samples per?
+```{r}
+data %>%
+  select(siteID, plotID, setDate, year, month) %>%
+  group_by(siteID, plotID, year, month) %>% 
+  count() %>% 
+  View()
+```
+
+What is the distribution of number of samples per plot across years?
+```{r}
+sample_freq <- data %>%
+  select(siteID, plotID, year, month, collectDate) %>%
+  group_by(siteID, plotID, year) %>% 
+  summarise(num_samples = n_distinct(collectDate))
+
+hist(sample_freq$num_samples)
+```
+
+
+

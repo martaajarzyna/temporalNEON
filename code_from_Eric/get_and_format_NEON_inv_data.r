@@ -1,14 +1,16 @@
+# Eric Sokol (esokol@battelleecology.org)
+# last updated 2019-10-29
+
+# clear out workspace
 rm(list = ls())
 gc()
 
+# set options
 options(stringsAsFactors = FALSE)
 
+# load packages
 library(neonUtilities)
 library(tidyverse)
-
-#################################################################################
-# -- user provided rank for desired taxonomic resolution
-my_cutoff_taxon_rank <- 'genus'
 
 #################################################################################
 # macroinvert dpid

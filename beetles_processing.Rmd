@@ -15,21 +15,30 @@ library(neonUtilities)
 library(piggyback)
 ```
 
-Download 
+Download data
 ```{r}
 beetles_raw <- loadByProduct("DP1.10022.001", check.size = FALSE)
 usethis::use_data(beetles_raw)
+```
 
-# data <- beetles_raw$bet_expertTaxonomistIDProcessed %>%
-#   select(uid, domainID, siteID, plotID, setDate, collectDate, taxonID, family, subfamily, scientificName) %>%
-#   mutate(year = lubridate::year(collectDate), 
-#                 month = lubridate::month(collectDate), 
-#                 day = lubridate::day(collectDate))
+Grab necessary columns from different tables. Important column info:
+* sampleID: unique ID for each combination of domainID, siteID, plotID, trapID, and collectDate (unique ID for bet_fielddata table)
+* subsampleID: unique ID for each group of individuals, multiple per sample (unique ID for bet_sorting); unclear why there are muliple entries for the same classification
+* individualID: unique ID for each individual identified by taxonomists (unique ID for bet_parataxonimist table)
 
-data <- beetles_raw$bet_parataxonomistID %>%
-  select(uid, domainID, siteID, plotID, trapID, setDate, collectDate, taxonID, scientificName) %>%
-  mutate(year = lubridate::year(collectDate), 
-                month = lubridate::month(collectDate), 
+There are multiple levels of taxonomic identification, need to decide which level of rigor we care about (NEON id often just to family, taxonomist ID to species but only for a subset, DNA ID for even smaller subset).
+```{r}
+data <- beetles_raw$bet_fielddata %>%
+  filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
+  select(sampleID, domainID, siteID, plotID, trapID, collectDate) %>%
+  left_join(beetles_raw$bet_sorting %>% 
+              filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch
+              select(sampleID, subsampleID, taxonID, scientificName, taxonRank, individualCount), 
+            by = "sampleID") %>%
+  filter(!is.na(subsampleID)) %>% #even though they were marked a sampled, some collection times don't acutally have any samples 
+  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank), by = "subsampleID") %>%
+    mutate(year = lubridate::year(collectDate),
+                month = lubridate::month(collectDate),
                 day = lubridate::day(collectDate))
 ```
 
@@ -38,7 +47,7 @@ How many plots?
 How many samples per?
 ```{r}
 data %>%
-  select(siteID, plotID, trapID, setDate, year, month) %>%
+  select(siteID, plotID, trapID, collectDate, year, month) %>%
   group_by(siteID, plotID, year, month) %>% 
   count() %>% 
   View()

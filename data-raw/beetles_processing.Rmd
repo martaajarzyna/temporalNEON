@@ -77,6 +77,16 @@ data_expert <- data_pin %>%
   select(-ends_with(".x"), -ends_with(".y"))
 ```
 
+What does individual count mean? There are a whole bunch of subsampleID's for which the number of species identified during pinning or by expert taxonomists does not equal the individual count:
+```{r}
+data_expert %>% 
+  group_by(subsampleID, individualCount) %>%
+  summarise(n_species = n_distinct(taxonID)) %>% 
+  filter(n_species != individualCount) %>%
+  dim()
+```
+For those where only one species was identified, we can probably assume that all the individuals were that species, but when multiple are identified how do we know how individuals are distributed across those species?
+
 How many sites?
 How many plots?
 How many samples per?

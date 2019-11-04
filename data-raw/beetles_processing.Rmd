@@ -17,8 +17,13 @@ library(piggyback)
 
 Download data
 ```{r}
-beetles_raw <- loadByProduct("DP1.10022.001", check.size = FALSE)
-usethis::use_data(beetles_raw)
+beetle_dir <- here::here("data", "beetles_raw.rda")
+if (file.exists(beetle_dir)){
+  load(beetle_dir)
+} else{
+  beetles_raw <- loadByProduct("DP1.10022.001", check.size = FALSE)
+  usethis::use_data(beetles_raw)
+}
 ```
 
 Grab necessary columns from different tables. Important column info:
@@ -27,19 +32,49 @@ Grab necessary columns from different tables. Important column info:
 * individualID: unique ID for each individual identified by taxonomists (unique ID for bet_parataxonimist table)
 
 There are multiple levels of taxonomic identification, need to decide which level of rigor we care about (NEON id often just to family, taxonomist ID to species but only for a subset, DNA ID for even smaller subset).
+
 ```{r}
 data <- beetles_raw$bet_fielddata %>%
   filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
   select(sampleID, domainID, siteID, plotID, trapID, collectDate) %>%
-  left_join(beetles_raw$bet_sorting %>% 
+  left_join(beetles_raw$bet_sorting %>%
               filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch
-              select(sampleID, subsampleID, taxonID, scientificName, taxonRank, individualCount), 
+              select(sampleID, subsampleID, taxonID, scientificName, taxonRank, individualCount,identificationQualifier),
             by = "sampleID") %>%
-  filter(!is.na(subsampleID)) %>% #even though they were marked a sampled, some collection times don't acutally have any samples 
-  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank), by = "subsampleID") %>%
-    mutate(year = lubridate::year(collectDate),
-                month = lubridate::month(collectDate),
-                day = lubridate::day(collectDate))
+  filter(!is.na(subsampleID)) %>% #even though they were marked a sampled, some collection times don't acutally have any samples
+  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank,identificationQualifier), by = "subsampleID") %>%
+  mutate(year = lubridate::year(collectDate),
+         month = lubridate::month(collectDate),
+         day = lubridate::day(collectDate))
+ 
+```
+
+```{r}
+# Replace sorting taxon info with pinning taxon info (people that pin specimens are more experienced with taxonomy), where available
+data_pin <- data %>%
+  mutate_if(is.factor, as.character) %>%
+  mutate(taxonID = ifelse(is.na(taxonID.y), taxonID.x, taxonID.y)) %>%
+  mutate(taxonRank = ifelse(is.na(taxonRank.y), taxonRank.x, taxonRank.y)) %>%
+  mutate(scientificName = ifelse(is.na(scientificName.y), scientificName.x, scientificName.y)) %>%
+  mutate(identificationSource = ifelse(is.na(scientificName.y), "sort", "pin")) %>%
+  mutate (identificationQualifier = ifelse(is.na(taxonID.y), identificationQualifier.x, identificationQualifier.y)) %>%
+  select(-ends_with(".x"), -ends_with(".y"))
+ 
+# Add expert taxonomy info, where available
+data_pin <- left_join(data_pin, select(beetles_raw$bet_expertTaxonomistIDProcessed,individualID,taxonID,scientificName,taxonRank,identificationQualifier),by = 'individualID')
+ 
+# Replacement old taxon info with expert info, where available
+# NOTE - This is repetitive with the code snippet above, and if you want to do it this way you can just combine the calls into one chunk. BUT, you may
+#     want to do more than this, as it is *just* a replacement of IDs for individual beetles that an expert identified. If the expert identified
+#           a sample as COLSP6 instead of CARSP14, though, then all CARSP14 from that trap on that date should probably be updated to COLSP6…
+data_expert <- data_pin %>%
+  mutate_if(is.factor, as.character) %>%
+  mutate(taxonID = ifelse(is.na(taxonID.y), taxonID.x, taxonID.y)) %>%
+  mutate(taxonRank = ifelse(is.na(taxonRank.y), taxonRank.x, taxonRank.y)) %>%
+  mutate(scientificName = ifelse(is.na(scientificName.y), scientificName.x, scientificName.y)) %>%
+  mutate(identificationSource = ifelse(is.na(scientificName.y), identificationSource, "expert")) %>%
+  mutate (identificationQualifier = ifelse(is.na(taxonID.y), identificationQualifier.x, identificationQualifier.y)) %>%
+  select(-ends_with(".x"), -ends_with(".y"))
 ```
 
 How many sites?

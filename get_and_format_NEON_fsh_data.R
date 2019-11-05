@@ -48,6 +48,9 @@ fsh_dat1 <- left_join(all_tabs$fsh_perPass, all_tabs$fsh_fieldData,
   by = c('reachID')) %>% 
   filter(is.na(samplingImpractical)) #remove records where fish couldn't be collected
 
+# get rid of dupe col names and .x suffix
+fsh_dat1 <- fsh_dat1[,!grepl('\\.y',names(fsh_dat1))]
+names(fsh_dat1) <- gsub('\\.x','',names(fsh_dat1))
 
 # individual fish counts
 fsh_dat_indiv <- left_join(all_tabs$fsh_perFish, fsh_dat1, by = "eventID") 
@@ -74,8 +77,7 @@ fsh_dat_bulk$reachID <- ifelse(is.na(fsh_dat_bulk$reachID),
 
 
 # combine indiv and bulk counts
-fsh_dat <- bind_rows(fsh_dat_indiv, fsh_dat_bulk) %>% 
-  mutate(den = estimatedTotalCount/benthicArea)
+fsh_dat <- bind_rows(fsh_dat_indiv, fsh_dat_bulk)
 
 # add count = 1 for indiv data
 fsh_dat$count <- ifelse(is.na(fsh_dat$bulkFishCount), 1, fsh_dat$bulkFishCount)
@@ -100,7 +102,7 @@ fsh_dat_fine <- fsh_dat %>%
 # grouping vars for aggregating density measurements 
 my_grouping_vars <- c('domainID','siteID','aquaticSiteType','namedLocation',
   'startDate','reachID','eventID','samplerType',
-  'fixedRandomReach','measuredReachLength',
+  'fixedRandomReach','measuredReachLength','efTime','netDeploymentTime',
   'scientificName') #could add in 'passNumber' if you want to
 
 # aggregate densities for each species group, pull out year and month from collectDate
@@ -114,3 +116,11 @@ fsh_dat_aggregate <- fsh_dat_fine %>%
     year = startDate %>% lubridate::year(),
     month = startDate %>% lubridate::month()
   ) %>% ungroup()
+
+#may want to calculate as catch per unit effort before moving to wide format
+
+
+# make wide
+fsh_dat_wide <- fsh_dat_aggregate %>% 
+  group_by(year, month, siteID, namedLocation, reachID, fixedRandomReach) %>%
+  spread(scientificName, number_of_fish, fill = 0)

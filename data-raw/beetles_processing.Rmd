@@ -39,7 +39,7 @@ data <- beetles_raw$bet_fielddata %>%
   select(sampleID, domainID, siteID, plotID, trapID, collectDate) %>%
   left_join(beetles_raw$bet_sorting %>%
               filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch
-              select(sampleID, subsampleID, taxonID, scientificName, taxonRank, individualCount,identificationQualifier),
+              select(sampleID, subsampleID, sampleType, taxonID, scientificName, taxonRank, individualCount,identificationQualifier),
             by = "sampleID") %>%
   filter(!is.na(subsampleID)) %>% #even though they were marked a sampled, some collection times don't acutally have any samples
   left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank,identificationQualifier), by = "subsampleID") %>%
@@ -77,6 +77,7 @@ data_expert <- data_pin %>%
   select(-ends_with(".x"), -ends_with(".y"))
 ```
 
+#individualCount variable
 What does individual count mean? There are a whole bunch of subsampleID's for which the number of species identified during pinning or by expert taxonomists does not equal the individual count:
 ```{r}
 data_expert %>% 
@@ -87,28 +88,104 @@ data_expert %>%
 ```
 For those where only one species was identified, we can probably assume that all the individuals were that species, but when multiple are identified how do we know how individuals are distributed across those species?
 
-How many sites?
-How many plots?
-How many samples per?
+There are also quite a few which have more species identified than the individual count
 ```{r}
-data %>%
-  select(siteID, plotID, trapID, collectDate, year, month) %>%
-  group_by(siteID, plotID, year, month) %>% 
-  count() %>% 
-  View()
+data_expert %>% 
+    group_by(year, subsampleID, individualCount) %>%
+    summarise(n_species = n_distinct(taxonID)) %>% 
+    filter(n_species > individualCount) %>%
+    View()
 ```
 
-What is the distribution of number of samples per plot across years?
+#Temporal Coverage
 
-What is the distribution of number of samples per trap
+How many traps sampled each year? 
 ```{r}
-sample_freq <- data %>%
-  select(siteID, plotID, trapID, year, month, collectDate) %>%
-  group_by(siteID, plotID, trapID, year) %>% 
-  summarise(num_samples = n_distinct(collectDate))
-
-hist(sample_freq$num_samples)
+data_expert %>%
+  select(plotID, trapID, year) %>%
+  distinct() %>%
+  group_by(year) %>%
+  count()
 ```
 
+How many years was each trap sampled?
+```{r}
+data_expert %>%
+  select(plotID, trapID, year) %>%
+  distinct() %>%
+  group_by(plotID, trapID) %>%
+  count()
+```
+
+What was temporal trap coverage like? 
+```{r}
+data_expert %>%
+  select(plotID, trapID, year) %>%
+  distinct() %>%
+  group_by(plotID, trapID) %>%
+  count(name = "years_sampled") %>%
+  group_by(years_sampled) %>%
+  count(name = "n_traps")
+```
+
+For plots generally?
+```{r}
+data_expert %>%
+  select(plotID, year) %>%
+  distinct() %>%
+  group_by(plotID) %>%
+  count(name = "years_sampled") %>%
+  group_by(years_sampled) %>%
+  count(name = "n_plots")# %>%
+  #mutate(cumulative = )
+```
+
+How many plots were sampled during each bout?
+```{r}
+data_expert %>%
+  select(plotID, trapID, collectDate) %>%
+  distinct() %>%
+  group_by(collectDate) %>% 
+  count()
+```
+
+How many plots had all four traps each year?
+```{r}
+data_expert %>%
+  select(plotID, trapID, year) %>%
+  distinct() %>%
+  group_by(year, plotID) %>%
+  count(name = "n_traps") %>%
+  group_by(year, n_traps) %>%
+  count(name = "n_plots") %>% View()
+```
+
+Histogram of traps per number of samples by year
+```{r}
+data_expert %>%
+  select(plotID, trapID, year, month, day) %>%
+  distinct() %>%
+  group_by(plotID, trapID, year) %>%
+  count() %>%
+  ggplot(aes(x = n)) +
+  geom_histogram() +
+  facet_grid(. ~ year) +
+  xlab("Number of Samples") +
+  ylab("Number of Traps")
+```
+
+Histogram of plots per number of samples by year
+```{r}
+data_expert %>%
+  select(plotID, year, month, day) %>%
+  distinct() %>%
+  group_by(plotID,  year) %>%
+  count() %>%
+  ggplot(aes(x = n)) +
+  geom_histogram() +
+  facet_grid(. ~ year) +
+  xlab("Number of Samples") +
+  ylab("Number of Plots")
+```
 
 

@@ -117,7 +117,7 @@ fsh_dat_aggregate <- fsh_dat_fine %>%
     month = startDate %>% lubridate::month()
   ) %>% ungroup()
 
-#may want to calculate as catch per unit effort before moving to wide format
+# may want to calculate as catch per unit effort before moving to wide format
 
 
 # make wide

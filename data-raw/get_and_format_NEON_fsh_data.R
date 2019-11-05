@@ -46,7 +46,8 @@ all_tabs <- neonUtilities::loadByProduct(
 # join field and pass tables
 fsh_dat1 <- left_join(all_tabs$fsh_perPass, all_tabs$fsh_fieldData, 
   by = c('reachID')) %>% 
-  filter(is.na(samplingImpractical)) #remove records where fish couldn't be collected
+  filter(is.na(samplingImpractical) | samplingImpractical == "") #remove records where fish couldn't be collected
+
 
 # get rid of dupe col names and .x suffix
 fsh_dat1 <- fsh_dat1[,!grepl('\\.y',names(fsh_dat1))]

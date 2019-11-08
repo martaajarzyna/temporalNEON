@@ -78,21 +78,21 @@ data_pin <- data_pin %>%
   bind_rows(lost_indv)
 ```
 
-
+Join expert data to existing pinning and sorting data
 ```{r}
 # Add expert taxonomy info, where available
-data_pin <- left_join(data_pin, 
+data_expert <- left_join(data_pin, 
                       select(beetles_raw$bet_expertTaxonomistIDProcessed,individualID,taxonID,scientificName,taxonRank,identificationQualifier), 
                       by = 'individualID', na_matches = "never") %>% distinct()
  
-#For some reason there are ~10 individualID's for which experts ID'd more than one species
-beetles_raw$bet_expertTaxonomistIDProcessed %>% group_by(individualID) %>% filter(n_distinct(taxonID) > 1) %>% View()
+#For some reason there are ~10 individualID's for which experts ID'd more than one species, that's why 10 additional records are added by the join
+#beetles_raw$bet_expertTaxonomistIDProcessed %>% group_by(individualID) %>% filter(n_distinct(taxonID) > 1) %>% View()
 
 # Replacement old taxon info with expert info, where available
 # NOTE - This is repetitive with the code snippet above, and if you want to do it this way you can just combine the calls into one chunk. BUT, you may
 #     want to do more than this, as it is *just* a replacement of IDs for individual beetles that an expert identified. If the expert identified
 #           a sample as COLSP6 instead of CARSP14, though, then all CARSP14 from that trap on that date should probably be updated to COLSP6…
-data_expert <- data_pin %>%
+data_expert <- data_expert %>%
   mutate_if(is.factor, as.character) %>%
   mutate(taxonID = ifelse(is.na(taxonID.y), taxonID.x, taxonID.y)) %>%
   mutate(taxonRank = ifelse(is.na(taxonRank.y), taxonRank.x, taxonRank.y)) %>%
@@ -100,26 +100,6 @@ data_expert <- data_pin %>%
   mutate(identificationSource = ifelse(is.na(scientificName.y), identificationSource, "expert")) %>%
   mutate (identificationQualifier = ifelse(is.na(taxonID.y), identificationQualifier.x, identificationQualifier.y)) %>%
   select(-ends_with(".x"), -ends_with(".y"))
-```
-
-#individualCount variable
-What does individual count mean? There are a whole bunch of subsampleID's for which the number of species identified during pinning or by expert taxonomists does not equal the individual count:
-```{r}
-data_expert %>% 
-  group_by(subsampleID, individualCount) %>%
-  summarise(n_species = n_distinct(taxonID)) %>% 
-  filter(n_species != individualCount) %>%
-  dim()
-```
-For those where only one species was identified, we can probably assume that all the individuals were that species, but when multiple are identified how do we know how individuals are distributed across those species?
-
-There are also quite a few which have more species identified than the individual count
-```{r}
-data_expert %>% 
-    group_by(year, subsampleID, individualCount) %>%
-    summarise(n_species = n_distinct(taxonID)) %>% 
-    filter(n_species > individualCount) %>%
-    View()
 ```
 
 #Temporal Coverage

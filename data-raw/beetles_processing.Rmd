@@ -102,6 +102,56 @@ data_expert <- data_expert %>%
   select(-ends_with(".x"), -ends_with(".y"))
 ```
 
+#Taxonomic Accuracy
+Let's look at what percentage of the time sorting/pinning ID matched up with the expert
+```{r}
+taxon_comp <- data_expert %>% 
+  filter(!is.na(individualID)) %>%
+  select(subsampleID, individualID, taxonID, identificationSource) %>%
+  left_join(data %>% select(subsampleID, sortingTaxonID = taxonID), by = "subsampleID") %>%
+  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, pinningTaxonID = taxonID), by = c("subsampleID", "individualID")) %>%
+  left_join(beetles_raw$bet_expertTaxonomistIDProcessed %>% select(individualID, expertTaxonID = taxonID), by = "individualID") %>%
+  distinct()
+```
+
+What percentage of individuals were ID'd by the expert as the same as other levels?
+```{r}
+taxon_comp %>%
+  mutate_if(is.factor, as.character) %>%
+  filter(identificationSource == "expert", expertTaxonID == pinningTaxonID, pinningTaxonID == sortingTaxonID) %>%
+  dim() %>%
+  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "expert"))[1]
+```
+
+Of those ID'd by the expert, what percentage were the same as pinning?
+```{r}
+taxon_comp %>%
+  mutate_if(is.factor, as.character) %>%
+  filter(identificationSource == "expert", expertTaxonID == pinningTaxonID) %>%
+  dim() %>%
+  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "expert"))[1]
+```
+
+Expert the same as sorting?
+```{r}
+taxon_comp %>%
+  mutate_if(is.factor, as.character) %>%
+  filter(identificationSource == "expert", expertTaxonID == sortingTaxonID) %>%
+  dim() %>%
+  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "expert"))[1]
+```
+
+Of those where pinning was the final taxon, how many were correctly ID'd by sorting? 
+```{r}
+taxon_comp %>%
+  mutate_if(is.factor, as.character) %>%
+  filter(identificationSource == "pin", sortingTaxonID == pinningTaxonID) %>%
+  dim() %>%
+  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "pin"))[1]
+```
+
+Parataxonomists very rarely disagreed with the sorting ID without sending samples on to experts. When they did send samples on to experts they were right 70% of the time.
+
 #Temporal Coverage
 
 How many traps sampled each year? 

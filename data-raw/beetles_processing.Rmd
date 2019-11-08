@@ -42,16 +42,17 @@ data <- beetles_raw$bet_fielddata %>%
               select(sampleID, subsampleID, sampleType, taxonID, scientificName, taxonRank, individualCount,identificationQualifier),
             by = "sampleID") %>%
   filter(!is.na(subsampleID)) %>% #even though they were marked a sampled, some collection times don't acutally have any samples
-  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank,identificationQualifier), by = "subsampleID") %>%
   mutate(year = lubridate::year(collectDate),
          month = lubridate::month(collectDate),
          day = lubridate::day(collectDate))
  
 ```
 
+Join taxonomic data from pinning with the sorting data
 ```{r}
 # Replace sorting taxon info with pinning taxon info (people that pin specimens are more experienced with taxonomy), where available
 data_pin <- data %>%
+  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank,identificationQualifier), by = "subsampleID") %>%
   mutate_if(is.factor, as.character) %>%
   mutate(taxonID = ifelse(is.na(taxonID.y), taxonID.x, taxonID.y)) %>%
   mutate(taxonRank = ifelse(is.na(taxonRank.y), taxonRank.x, taxonRank.y)) %>%
@@ -59,10 +60,34 @@ data_pin <- data %>%
   mutate(identificationSource = ifelse(is.na(scientificName.y), "sort", "pin")) %>%
   mutate (identificationQualifier = ifelse(is.na(taxonID.y), identificationQualifier.x, identificationQualifier.y)) %>%
   select(-ends_with(".x"), -ends_with(".y"))
- 
+
+#some subsamples weren't fully ID'd by the pinners, so we have to recover the unpinned-individuals
+lost_indv <- data_pin %>% 
+  filter(!is.na(individualID)) %>%
+  group_by(subsampleID, individualCount) %>%
+  summarise(n_ided = n_distinct(individualID)) %>% 
+  filter(n_ided < individualCount) %>%
+  mutate(unidentifiedCount = individualCount - n_ided) %>%
+  select(subsampleID, individualCount = unidentifiedCount) %>%
+  left_join(data %>% select(-individualCount), by = "subsampleID") %>%
+  mutate(identificationSource = "sort")
+
+#add unpinned-individuals back to the pinned id's, adjust the individual counts so pinned individuals have a count of 1
+data_pin <- data_pin %>%
+  mutate(individualCount = ifelse(identificationSource == "sort", individualCount, 1)) %>%
+  bind_rows(lost_indv)
+```
+
+
+```{r}
 # Add expert taxonomy info, where available
-data_pin <- left_join(data_pin, select(beetles_raw$bet_expertTaxonomistIDProcessed,individualID,taxonID,scientificName,taxonRank,identificationQualifier),by = 'individualID')
+data_pin <- left_join(data_pin, 
+                      select(beetles_raw$bet_expertTaxonomistIDProcessed,individualID,taxonID,scientificName,taxonRank,identificationQualifier), 
+                      by = 'individualID', na_matches = "never") %>% distinct()
  
+#For some reason there are ~10 individualID's for which experts ID'd more than one species
+beetles_raw$bet_expertTaxonomistIDProcessed %>% group_by(individualID) %>% filter(n_distinct(taxonID) > 1) %>% View()
+
 # Replacement old taxon info with expert info, where available
 # NOTE - This is repetitive with the code snippet above, and if you want to do it this way you can just combine the calls into one chunk. BUT, you may
 #     want to do more than this, as it is *just* a replacement of IDs for individual beetles that an expert identified. If the expert identified

@@ -1,0 +1,112 @@
+table,fieldName,description,dataType,units,parserToCreate,entryValidationRulesParser,entryValidationRulesForm
+mam_perplotnight,uid,"Unique ID within NEON database; an identifier for the record",string,NA,"[CREATE_UID]",,
+mam_perplotnight,nightuid,"Unique ID of associated record in perplotnight table",string,NA,,"[ASCII]","[HIDDEN][REQUIRE]"
+mam_perplotnight,platformInfo,"Operating System and browser information (where applicable) of computer used during data entry",string,NA,,"[ASCII]",
+mam_perplotnight,dataQF,"Data quality flag",string,NA,,"[ASCII]",
+mam_perplotnight,endDate,"The end date-time or interval during which an event occurred",dateTime,NA,"[CONVERT_TO_UTC(namedLocation)]",,"[DEFAULT_TO(mam_perplotnight_in.startDate)][REQUIRE]"
+mam_perplotnight,plotID,"Plot identifier (NEON site code_XXX)",string,NA,,"[NAMED_LOCATION_TYPE('OS Plot - mam')]","[FROM_TABLE(TOS_SPATIAL)][REQUIRE]"
+mam_perplotnight,fulcrumVersion,"Version of the Fulcrum application used during data entry",string,NA,,"[ASCII]",
+mam_perplotnight,samplingProtocolVersion,"The NEON document number and version where detailed information regarding the sampling method used is available; format NEON.DOC.######vX",string,NA,,"[LOV]","[WARN][LOV]"
+mam_perplotnight,startDate,"The start date-time or interval during which an event occurred",dateTime,NA,"[CONVERT_TO_UTC(namedLocation)]",,"[DATE_FORMAT('YYYY-MM-DD')][REQUIRE]"
+mam_perplotnight,remarks,"Technician notes; free text comments accompanying the record",string,NA,,"[ASCII]","[ASCII]"
+mam_pertrapnight,enteredBy,"An identifier for the technician who entered the data",string,NA,,"[ASCII]","[FROM_TABLE(PERSONNEL)][HIDDEN]"
+mam_pertrapnight,externalURLs,"Pipe-delimited list of web accessible links that provide additional information about the specimen",string,NA,,,
+mam_pertrapnight,trapCoordinate,"Relative coordinate of the trap within the given plotID (A1 - J10). If row or column coordinate is unknown, X is used",string,NA,,"[REQUIRE][LOV]","[REQUIRE][LOV]"
+mam_pertrapnight,identifierEmail,"E-mail address of the primary identifier",string,NA,,,
+mam_pertrapnight,voucherSampleID,"Unique identifier for the voucher sample",string,NA,,"[DOES_NOT_EXIST][ASCII]",
+mam_pertrapnight,dnaBarcoded,"An indicator of whether the sample was selected as a candidate for genetic barcoding",string,NA,,,
+mam_pertrapnight,nipples,"Condition of the nipples at time of capture; if mature: enlarged = nipples enlarged, nonenlarged = nipples not enlarged",string,NA,,"[LOV]","[IF(sex=F), WARN][LOV]"
+mam_pertrapnight,recapture,"Indicates whether or not the captured individual is a recapture; 'Y' for yes, 'N' for no",string,NA,,"[LOV]","[IF IS_NOT_BLANK(tagID) OR IS_NOT_BLANK(individualCode), REQUIRE][LOV]"
+mam_pertrapnight,fulcrumVersion,"Version of the Fulcrum application used during data entry",string,NA,,"[ASCII]",
+mam_pertrapnight,fecalSampleCondition,"Condition of fecal sample at time of collection; 'fresh' = fresh fecal sample collected from mammal; 'old' = 'Old' fecal sample collected from trap",string,NA,,"[LOV]","[LOV] [IF IS_NOT_BLANK(fecalSampleID) OR IS_NOT_BLANK(fecalSampleBarcode), REQUIRE]"
+mam_pertrapnight,totalLength,"total length (head + body); in millimeters",unsigned integer,millimeter,,"[GREATER_THAN_OR_EQUAL_TO(25)][LESS_THAN_OR_EQUAL_TO(501)]","[GREATER_THAN_OR_EQUAL_TO(25)][LESS_THAN_OR_EQUAL_TO(501)]"
+mam_pertrapnight,hairSampleBarcode,"Barcode of the hair sample",string,NA,,"[ASCII]",
+mam_pertrapnight,endDate,"The end date-time or interval during which an event occurred",dateTime,NA,"[CONVERT_TO_UTC(namedLocation)]",,"[DEFAULT_TO(mam_pertrapnight_in.startDate)][REQUIRE][HIDDEN]"
+mam_pertrapnight,hairSampleID,"Unique identifier for the hair sample",string,NA,,"[DOES_NOT_EXIST][ASCII]",
+mam_pertrapnight,platformInfo,"Operating System and browser information (where applicable) of computer used during data entry",string,NA,,"[ASCII]",
+mam_pertrapnight,tagID,"Domain-level unique identifier of tag used to mark the individual",string,NA,,"[MIGHT_EXIST][ASCII][IF IS_NOT_BLANK, NOT_MATCH_REGULAR_EXPRESSION('\\?|\\/|\\-|\\+|\\=|\'|(?i)UNDEFINED|(?i)NONE|(?i)NULL|(?i)UNABLE|(?i)NONTARGET|\\.$')][MATCH_REGULAR_EXPRESSION('NEON.MAM.D[0-2][0-9].[A-Z0-9]{4}')]",
+mam_pertrapnight,bloodSampleFate,"Fate of the blood sample",string,NA,,"[LOV][IF IS_NOT_BLANK(bloodSampleID), REQUIRE][IF IS_BLANK(bloodSampleID), REQUIRE_NULL]","[DEFAULT_TO('active')][HIDDEN]"
+mam_pertrapnight,identifierInstitution,"The full name of the institutional or organizational affiliation of the identifier",string,NA,,,
+mam_pertrapnight,startDate,"The start date-time or interval during which an event occurred",dateTime,NA,"[CONVERT_TO_UTC(namedLocation)]",,"[SUGGESTED_ENTRY(mam.perplotnight_in.startDate)][DATE_FORMAT('YYYY-MM-DD')][REQUIRE]"
+mam_pertrapnight,tailLength,"length of tail; in millimeters",unsigned integer,millimeter,,"[GREATER_THAN_OR_EQUAL_TO(5)][LESS_THAN_OR_EQUAL_TO(251)]","[GREATER_THAN_OR_EQUAL_TO(5)][LESS_THAN_OR_EQUAL_TO(251)]"
+mam_pertrapnight,taxonID,"Species code, based on one or more sources",string,NA,,"[ELEMENT_OF('SMALL_MAMMAL', 'taxonID', 'T')][IF(trapStatus='4 - more than 1 capture in one trap'), REQUIRE][IF(trapStatus='5 – capture'), REQUIRE]","[ELEMENT_OF('SMALL_MAMMAL', 'taxonID', 'T')][IF(trapStatus=4), REQUIRE][IF(trapStatus=5), REQUIRE]"
+mam_pertrapnight,trapType,"Type of trap from which a sample was collected",string,NA,,"[REQUIRE][LOV]","[REQUIRE][LOV]"
+mam_pertrapnight,daysOfTrapping,"number of days between trap setting and collecting events",unsigned integer,nominalDay,,,
+mam_pertrapnight,identificationQualifier,"A standard term to express the determiner's doubts about the Identification",string,NA,,"[LOV]","[LOV]"
+mam_pertrapnight,uid,"Unique ID within NEON database; an identifier for the record",string,NA,"[CREATE_UID]",,
+mam_pertrapnight,nightuid,"Unique ID of associated record in perplotnight table",string,NA,,"[ASCII]","[DEFAULT_TO(nightuid)][HIDDEN][REQUIRE]"
+mam_pertrapnight,hairSampleFate,"Fate of the hair sample",string,NA,,"[LOV][IF IS_NOT_BLANK(hairSampleID), REQUIRE][IF IS_BLANK(hairSampleID), REQUIRE_NULL]","[DEFAULT_TO('active')][HIDDEN]"
+mam_pertrapnight,hindfootLength,"length of left hindfoot; including claws; in millimeters",unsigned integer,millimeter,,"[GREATER_THAN_OR_EQUAL_TO(5)][LESS_THAN_OR_EQUAL_TO(101)]","[GREATER_THAN_OR_EQUAL_TO(5)][LESS_THAN_OR_EQUAL_TO(101)]"
+mam_pertrapnight,adultTicksAttached,"Indicates whether adult ticks are observed on the captured individual",string,NA,,"[LOV]","[IF IS_NOT_BLANK(tagID) OR IS_NOT_BLANK(individualCode), REQUIRE][LOV]"
+mam_pertrapnight,fate,"The fate of the individual, unless marked and released; 'dead' = dead, 'escaped' = escaped while handling, 'nontarget' = released, non-target species, 'released' = target or opportunistic species released without full processing",string,NA,,"[LOV]","[LOV]"
+mam_pertrapnight,earSampleBarcode,"Barcode of the ear sample",string,NA,,"[ASCII]",
+mam_pertrapnight,voucherSampleBarcode,"Barcode of the voucher sample",string,NA,,"[ASCII]",
+mam_pertrapnight,voucherSampleFate,"Fate of a voucher sample",string,NA,,"[LOV][IF IS_NOT_BLANK(voucherSampleID), REQUIRE][IF IS_BLANK(voucherSampleID), REQUIRE_NULL]","[DEFAULT_TO('active')][HIDDEN]"
+mam_pertrapnight,bloodSampleMethod,"Method used to collect the blood sample",string,NA,,"[LOV]","[LOV][IF IS_NOT_BLANK(bloodSampleID) OR IS_NOT_BLANK(bloodSampleBarcode), REQUIRE]"
+mam_pertrapnight,bloodSampleID,"Unique identifier for the blood sample",string,NA,,"[DOES_NOT_EXIST][ASCII]",
+mam_pertrapnight,remarks,"Technician notes; free text comments accompanying the record",string,NA,,"[ASCII]","[ASCII]"
+mam_pertrapnight,measuredBy,"An identifier for the technician who measured or collected the data",string,NA,,"[ASCII]","[FROM_TABLE(PERSONNEL)]"
+mam_pertrapnight,fecalSampleBarcode,"Barcode of the fecal sample",string,NA,,"[ASCII]",
+mam_pertrapnight,identificationReferences,"A list of sources (concatenated and semicolon separated) used to derive the specific taxon concept; including field guide editions, books, or versions of NEON keys used",string,NA,,"[LOV]","[LOV]"
+mam_pertrapnight,vagina,"Condition of the vagina at time of capture; if mature: swollen, plugged, neither",string,NA,,"[LOV]","[IF(sex=F), WARN][LOV]"
+mam_pertrapnight,hairSampleContents,"The type(s) of hair collected",string,NA,,"[LOV]","[LOV] [IF IS_NOT_BLANK(hairSampleID) OR IS_NOT_BLANK(hairSampleBarcode), REQUIRE]"
+mam_pertrapnight,nymphalTicksAttached,"Indicates whether nymphal ticks are observed on the captured individual",string,NA,,"[LOV]","[IF IS_NOT_BLANK(tagID) OR IS_NOT_BLANK(individualCode), REQUIRE][LOV]"
+mam_pertrapnight,pregnancyStatus,"Condition at time of capture; if mature: 'pregnant' | 'not'",string,NA,,"[LOV]","[IF(sex=F), WARN][LOV]"
+mam_pertrapnight,earSampleFate,"Fate of the ear sample",string,NA,,"[LOV][IF IS_NOT_BLANK(earSampleID), REQUIRE][IF IS_BLANK(earSampleID), REQUIRE_NULL]","[DEFAULT_TO('active')][HIDDEN]"
+mam_pertrapnight,recordedBy,"An identifier for the technician who recorded the data",string,NA,,"[ASCII]","[FROM_TABLE(PERSONNEL)]"
+mam_pertrapnight,dataQF,"Data quality flag",string,NA,,"[ASCII]",
+mam_pertrapnight,lifeStage,"The age class of the individual at the time the Occurrence was recorded. juvenile = obvious signs of a very young individual, small size, distinctive pelage coloration; subabult; adult",string,NA,,"[IF IS_NOT_BLANK(taxonID), REQUIRE][LOV]","[IF IS_NOT_BLANK(taxonID), REQUIRE][LOV]"
+mam_pertrapnight,larvalTicksAttached,"Indicates whether larval ticks are observed on the captured individual",string,NA,,"[LOV]","[IF IS_NOT_BLANK(tagID) OR IS_NOT_BLANK(individualCode), REQUIRE][LOV]"
+mam_pertrapnight,fecalSampleFate,"Fate of the fecal sample",string,NA,,"[LOV][IF IS_NOT_BLANK(fecalSampleID), REQUIRE][IF IS_BLANK(fecalSampleID), REQUIRE_NULL]","[DEFAULT_TO('active')][HIDDEN]"
+mam_pertrapnight,plotID,"Plot identifier (NEON site code_XXX)",string,NA,,"[NAMED_LOCATION_TYPE('OS Plot - mam')]","[FROM_TABLE(TOS_SPATIAL)][REQUIRE]"
+mam_pertrapnight,specimenSource,"Physical source from which individual was obtained",string,NA,,,
+mam_pertrapnight,earSampleID,"Unique identifier for the ear sample",string,NA,,"[DOES_NOT_EXIST][ASCII]",
+mam_pertrapnight,sampleStatus,"Status of sample for downstream processing and/or analysis",string,NA,,,
+mam_pertrapnight,replacedTag,"Indicates which ear tag was replaced (L#### | R####) or which ear appears to have lost a tag ('left' = left ear tag replaced; 'right' = right ear tag replaced)",string,NA,,"[ASCII]",
+mam_pertrapnight,trapStatus,"Categorical descriptor of trap status; 0 - no data; 1 - trap not set; 2 - trap disturbed/door closed but empty; 3 - trap door open or closed w/ spoor left; 4 - >1 capture in one trap; 5 - capture; 6 - trap set and empty",string,NA,,"[LOV][REQUIRE]","[REQUIRE][GREATER_THAN_OR_EQUAL_TO(0)][LESS_THAN_OR_EQUAL_TO(6)]"
+mam_pertrapnight,fecalSampleID,"Unique identifier for the fecal sample",string,NA,,"[DOES_NOT_EXIST][ASCII]",
+mam_pertrapnight,individualCode,"Barcode of an individual",string,NA,,"[ASCII]",
+mam_pertrapnight,testes,"Condition of the testes at time of capture; if mature: scrotal = testes descended, nonscrotal = testes abdominal",string,NA,,"[LOV]","[IF(sex=M), WARN][LOV]"
+mam_pertrapnight,reproduction,"The presumed method of reproduction",string,NA,,,
+mam_pertrapnight,earLength,"length of left ear; in millimeters",unsigned integer,millimeter,,"[GREATER_THAN(0)][LESS_THAN_OR_EQUAL_TO(51)]","[GREATER_THAN(0)][LESS_THAN_OR_EQUAL_TO(51)]"
+mam_pertrapnight,bloodSampleBarcode,"Barcode of the blood sample",string,NA,,"[ASCII]",
+mam_pertrapnight,individualFate,"Fate of a tagged individual",string,NA,,"[LOV][IF IS_NOT_BLANK(tagID) AND IS_NOT_BLANK(fate), REQUIRE][IF IS_BLANK(tagID), REQUIRE_NULL]","[HIDDEN][IF(mam_pertrapnight_in.fate!='dead'), 'released'][IF(mam_pertrapnight_in.fate='dead'), 'active'][REQUIRE]"
+mam_pertrapnight,method,"Published method used for analysis",string,NA,,,
+mam_pertrapnight,sex,"M for male, F for female, U for unknown",string,NA,,"[LOV][IF IS_NOT_BLANK(taxonID), REQUIRE]","IF IS_NOT_BLANK(taxonID), REQUIRE][LOV]"
+mam_pertrapnight,weight,"Live weight as measured with a spring scale; in grams",unsigned integer,gram,,"[GREATER_THAN(0)][LESS_THAN_OR_EQUAL_TO(601)]","[GREATER_THAN(0)][LESS_THAN_OR_EQUAL_TO(601)]"
+div_voucher,plantDescription,"Description of the plant being collected for archive",string,NA,,"[ASCII]","[ASCII]"
+div_voucher,fulcrumVersion,"Version of the Fulcrum application used during data entry",string,NA,,"[ASCII]",
+div_voucher,tagFate,"Fate of domain-level unique identifier used to mark the individual",string,NA,,"[IF (IS_NOT_BLANK(tagID)), 'released']","[HIDDEN]['released']"
+div_voucher,untaggedPlantID,"Identifier for untagged plant",string,NA,,"[IF (IS_BLANK(tagID)),MATCH_REGULAR_EXPRESSION('(?i)pla.([A-Z]{4}).(20|21)[0-9][0-9](0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01]).(0[0-9]|[1][0-9]|2[0-3]):[0-5][0-9]$')]","[HIDDEN][IF (IS_BLANK(tagID)), 'pla.' + siteID + '.' + startDate + '.' + collectTime]"
+div_voucher,voucherLocality,"Description of the location at which the event occurred",string,NA,,"[ASCII]","[ASCII]"
+div_voucher,voucherSampleID,"Unique identifier for the voucher sample",string,NA,,"[DOES_NOT_EXIST][MATCH_REGULAR_EXPRESSION('(?i)pla.([A-Z]{4}).(20|21)[0-9][0-9](0[1-9]|1[012])(0[1-9]|[12][0-9]|3[01]).(0[0-9]|[1][0-9]|2[0-3]):[0-5][0-9].([A-Z]{2,3}).V')]","['pla.' + siteID +  '.' + startDate + '.' + collectTime + '.' + [a-z]{2,3} + '.V' + .*]"
+div_voucher,recordedBy,"An identifier for the technician who recorded the data",string,NA,,"[ASCII]","[FROM_TABLE(PERSONNEL)]"
+div_voucher,taxonID,"Species code, based on one or more sources",string,NA,,"[REQUIRE][ELEMENT_OF('PLANT','taxonID','T')]","[REQUIRE][ELEMENT_OF('PLANT','taxonID','T')]"
+div_voucher,endDate,"The end date-time or interval during which an event occurred",dateTime,NA,"[CONVERT_TO_UTC(namedLocation)]",,"[DATE_FORMAT('YYYY-MM-DD')][DEFAULT_TO(startDate)][HIDDEN]"
+div_voucher,altLongitude,"Alternate Sampling Location coordinate - longitude",real,decimalDegree,,,"[IF (IS_BLANK(plotID)), REQUIRE]"
+div_voucher,altElevation,"Alternate elevation (in meters) above sea level",real,meter,,,"[IF (IS_BLANK(plotID)), REQUIRE]"
+div_voucher,remarks,"Technician notes; free text comments accompanying the record",string,NA,,"[ASCII]","[ASCII]"
+div_voucher,collectedBy,"An identifier for the technician who collected the sample or specimen",string,NA,,"[ASCII]","[FROM_TABLE(PERSONNEL)]"
+div_voucher,taxonIDRemarks,"Technician notes about the specific taxon; free text comments accompanying the record",string,NA,,"[ASCII]",
+div_voucher,altGeodeticDatum,"Model used to measure horizontal position on the earth for alternate location coordinate",string,NA,,"[ASCII]","[IF (IS_BLANK(plotID)), REQUIRE]"
+div_voucher,morphospeciesIDRemarks,"Technician notes about the morphospecies; free text comments accompanying the record",string,NA,,"[ASCII]","[ASCII]"
+div_voucher,dataQF,"Data quality flag",string,NA,,"[ASCII]",
+div_voucher,identifiedBy,"An identifier for the technician who identified the specimen",string,NA,,"[ASCII]","[FROM_TABLE(PERSONNEL), REQUIRE]"
+div_voucher,platformInfo,"Operating System and browser information (where applicable) of computer used during data entry",string,NA,,"[ASCII]",
+div_voucher,voucherLifeStage,"Life stage of the plant collected for voucher",string,NA,,"[LOV]","[LOV]"
+div_voucher,identificationReferences,"A list of sources (concatenated and semicolon separated) used to derive the specific taxon concept; including field guide editions, books, or versions of NEON keys used",string,NA,,"[LOV]","[LOV]"
+div_voucher,tagID,"Domain-level unique identifier of tag used to mark the individual",string,NA,,"[EXISTS]",
+div_voucher,altElevationUncertainty,"Alternate uncertainty in elevation values (in meters)",real,meter,,,
+div_voucher,locationID,"Identifier for location where sample was collected",string,NA,,"[REQUIRE][NAMED_LOCATION_TYPE('OS Plot - div' OR 'OS Plot - brd' OR 'OS Plot - mam' OR 'OS Plot - mos' OR 'OS Plot - phe' OR 'OS Plot - tck' OR 'OS Plot - all' OR 'SITE')]","[REQUIRE][NAMED_LOCATION_TYPE('OS Plot - brd' OR 'OS Plot - mam' OR 'OS Plot - mos' OR 'OS Plot - phe' OR 'OS Plot - tck' OR 'OS Plot - all' OR 'SITE')]"
+div_voucher,identificationQualifier,"A standard term to express the determiner's doubts about the Identification",string,NA,,"[LOV]","[LOV]"
+div_voucher,altCoordinateUncertainty,"The horizontal distance (in meters) from the given altLatitude and altLongitude describing the smallest circle containing the whole of the Location. Zero is not a valid value for this term",real,meter,,,
+div_voucher,voucherSampleCode,"Barcode of a voucher sample",string,NA,,"[ASCII]","[HIDDEN]"
+div_voucher,altCoordinateSource,"Alternate method used to collect or create spatial information",string,NA,,"[ASCII]","[IF (IS_BLANK(plotID)), REQUIRE]"
+div_voucher,tagCode,"Code of domain-level unique identifier used to mark the individual",string,NA,,"[ASCII]","[HIDDEN]"
+div_voucher,associatedTaxa,"A list of taxa associated with the taxon at the time of its collection. References to taxa are preceded by the relationship",string,NA,,"[ASCII]","[ASCII]"
+div_voucher,habitatDescription,"Description of the habitat in which the event occurred",string,NA,,"[ASCII]","[ASCII]"
+div_voucher,altLatitude,"Alternate Sampling Location coordinate - latitude",real,decimalDegree,,,"[IF (IS_BLANK(plotID)), REQUIRE]"
+div_voucher,morphospeciesID,"Identifier for morphospecies",string,NA,,"[ASCII]","[ASCII][FROM_TABLE(TOS_MORPHOSPECIES)]"
+div_voucher,voucherSampleFate,"Fate of a voucher sample",string,NA,,"[ASCII]","[HIDDEN][DEFAULT_TO('active')]"
+div_voucher,startDate,"The start date-time or interval during which an event occurred",dateTime,NA,"[CONVERT_TO_UTC(namedLocation)]",,"[DATE_FORMAT('YYYY-MM-DD')]"
+div_voucher,uid,"Unique ID within NEON database; an identifier for the record",string,NA,"[CREATE_UID]",,"[HIDDEN]"

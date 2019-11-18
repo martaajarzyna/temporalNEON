@@ -1,0 +1,73 @@
+---
+title: "ecocomDP"
+author: "Kari Norman"
+date: "11/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(taxadb)
+```
+
+```{r}
+load("data/beetles_counts.rda")
+load("data/beetles_counts.rda")
+```
+
+#Observation Table
+
+All individuals of the same species collected at the same time/same location are considered the same observation, regardless of how they were ID'd
+
+*Still needs observation_id, event_id, and package_id
+```{r}
+observation <- beetles_counts %>%
+  unite(location_id, plotID, trapID) %>%
+  mutate(variable_name = "abundance", unit = "count") %>%
+  select(location_id, 
+         observation_datetime = collectDate, 
+         taxon_id = taxonID, 
+         variable_name, 
+         value = count, 
+         unit)
+         
+```
+
+#Location Table
+
+*The location ID and the name are synonymous
+*not sure what parent_location_id is
+```{r}
+location <- beetles_raw$bet_fielddata %>%
+  unite(location_id, plotID, trapID) %>%
+  select(location_id, 
+         latitude = decimalLatitude, 
+         longitude = decimalLongitude,
+         elevation)
+```
+
+#Taxon Table
+
+```{r}
+#get all id's from all identification methods
+taxon <- bind_rows(beetles_raw$bet_sorting %>%
+  select(taxonID, taxonRank, scientificName), 
+  beetles_raw$bet_parataxonomistID %>%
+    select(taxonID, taxonRank, scientificName), 
+  beetles_raw$bet_expertTaxonomistIDProcessed %>%
+    select(taxonID, taxonRank, scientificName)) %>% 
+  distinct() %>%
+  filter(scientificName != "Carabidae spp.", taxonID != "") %>% #remove typo (entry with the apropriate sciName is already in df)
+  select(taxon_id = taxonID, taxon_rank = taxonRank, taxon_name = scientificName) %>%
+  mutate(authority_system = "itis", 
+         #create column on cleaned scientific names to get id's from 
+         taxon_name_clean = clean_names(str_replace(taxon_name, " \\(.*\\)", ""), lowercase = FALSE),
+         authority_taxon_id = get_ids(taxon_name_clean, "itis", "bare")) %>%
+  select(-taxon_name_clean)
+
+```
+

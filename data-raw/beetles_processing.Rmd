@@ -105,6 +105,17 @@ beetles_data <- data_expert
 usethis::use_data(beetles_data)
 ```
 
+Get raw counts table
+```{r}
+beetles_counts <- beetles_data %>%
+  select(-c(subsampleID, sampleType, individualID, identificationSource, identificationQualifier)) %>%
+  group_by_at(vars(-individualCount)) %>%
+  summarise(count = sum(individualCount)) %>%
+  ungroup()
+
+usethis::use_data(beetles_counts)
+```
+
 #Taxonomic Accuracy
 Let's look at what percentage of the time sorting/pinning ID matched up with the expert
 ```{r}

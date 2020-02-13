@@ -116,6 +116,43 @@ beetles_counts <- beetles_data %>%
 usethis::use_data(beetles_counts)
 ```
 
+# Formatting for analysis packages
+
+Codyn Package formatting
+```{r}
+#Intra annual variability
+codyn_beetles_intra <- beetles_counts %>% 
+  filter(!is.na(count)) %>%
+  select(siteID, plotID, trapID, collectDate, scientificName, count) %>%
+  group_by(siteID, collectDate) %>%
+  mutate(n_traps = n_distinct(trapID, plotID)) %>%
+  group_by(siteID, collectDate, scientificName) %>%
+  mutate(abundance = sum(count)) %>%
+  select(-c(plotID, trapID, count)) %>%
+  distinct() %>%
+  ungroup()
+
+#Inter annual variability
+## to keep track of effort within a year, 
+## include a column n_samples which is the number of times a trap was sampled in that year
+codyn_beetles_inter <- beetles_counts %>% 
+  filter(!is.na(count)) %>%
+  select(siteID, plotID, trapID, year, collectDate, scientificName, count) %>%
+  group_by(siteID, year) %>%
+  mutate(n_samples = n_distinct(trapID, plotID, collectDate)) %>%
+  select(-c(trapID, plotID, collectDate)) %>%
+  group_by(siteID, year, scientificName) %>%
+  mutate(abundance = sum(count)) %>%
+  select(-count) %>%
+  distinct() %>%
+  ungroup()
+```
+
+number of samples per site per year
+```{r}
+
+```
+
 #Taxonomic Accuracy
 Let's look at what percentage of the time sorting/pinning ID matched up with the expert
 ```{r}

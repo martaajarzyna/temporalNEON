@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(neonUtilities)
 library(piggyback)
+library(lubridate)
 ```
 
 Download data
@@ -36,15 +37,34 @@ There are multiple levels of taxonomic identification, need to decide which leve
 ```{r}
 data <- beetles_raw$bet_fielddata %>%
   filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
-  select(sampleID, domainID, siteID, plotID, trapID, collectDate) %>%
+  select(sampleID, domainID, siteID, plotID, trapID, setDate, collectDate, eventID, trappingDays) %>%
+  #eventID's are inconsistently separated by periods, so remove
+  mutate(eventID = str_remove_all(eventID, "[.]")) %>%
+  #Code below will take the original trappingDays entry where supplied, unfortunately it doesn't seem to account for traps that were
+  #sampled more than once for a given setDate (always measures days from setDate, not last time collected), so we might as well just 
+  #calculate our own the same way and not deal with NA's
+  # #it seems number of trapping days is only entered where the eventID is recorded without period separators, 
+  # #so let's make them all look the same
+  # mutate(eventID = str_remove_all(eventID, "[.]")) %>%
+  # #and then fill in NA's
+  # group_by(eventID) %>%
+  # fill(trappingDays) %>%
+  # #there are still some eventID's that have no trapping days calculated (they're NA), so calculate those
+  # mutate(calctrappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1))#,
+  #        newtrappingDays = case_when(
+  #   is.na(trappingDays) ~ calctrappingDays,
+  #   TRUE ~ trappingDays
+  # ))
+  #let's get number of trapping days for each bout, the trapping days doesn't really make sense %>%
+  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1)) %>%
   left_join(beetles_raw$bet_sorting %>%
               filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch
               select(sampleID, subsampleID, sampleType, taxonID, scientificName, taxonRank, individualCount,identificationQualifier),
             by = "sampleID") %>%
-  filter(!is.na(subsampleID)) %>% #even though they were marked a sampled, some collection times don't acutally have any samples
-  mutate(year = lubridate::year(collectDate),
-         month = lubridate::month(collectDate),
-         day = lubridate::day(collectDate))
+  filter(!is.na(subsampleID)) #%>% #even though they were marked a sampled, some collection times don't acutally have any samples
+  # mutate(year = lubridate::year(collectDate),
+  #        month = lubridate::month(collectDate),
+  #        day = lubridate::day(collectDate))
  
 ```
 
@@ -120,38 +140,95 @@ usethis::use_data(beetles_counts)
 
 Codyn Package formatting
 ```{r}
-#Intra annual variability
-codyn_beetles_intra <- beetles_counts %>% 
-  filter(!is.na(count)) %>%
-  select(siteID, plotID, trapID, collectDate, scientificName, count) %>%
-  group_by(siteID, collectDate) %>%
-  mutate(n_traps = n_distinct(trapID, plotID)) %>%
-  group_by(siteID, collectDate, scientificName) %>%
-  mutate(abundance = sum(count)) %>%
-  select(-c(plotID, trapID, count)) %>%
+# Calculate the total trapping days for a bout
+bout_trap_days <- beetles_counts %>%
+  select(siteID, plotID, trapID, eventID, trappingDays) %>%
   distinct() %>%
-  ungroup()
+  group_by(siteID, eventID) %>%
+  mutate(totalTrapDays = sum(trappingDays)) %>%
+  select(-c(trapID, plotID, trappingDays)) %>%
+  distinct()
+  
+
+#Intra annual variability
+beetles_site_bout <- beetles_counts %>% 
+  filter(!is.na(count)) %>%
+  select(siteID, plotID, eventID, collectDate, scientificName, count) %>%
+  #for some eventID's (bouts) collection happened over two days, change collectDate to just the first day
+  #so we have a single collectionDate
+  group_by(siteID, plotID, eventID) %>%
+  mutate(collectDate = case_when(
+    n_distinct(collectDate) > 1 ~ unique(collectDate)[1],
+    TRUE ~ collectDate
+  )) %>%
+  group_by(siteID, collectDate, eventID, scientificName) %>%
+  mutate(abundance = sum(count)) %>%
+  select(-c(plotID, count)) %>%
+  distinct() %>%
+  ungroup() %>%
+  left_join(bout_trap_days, by = c("siteID", "eventID")) 
 
 #Inter annual variability
-## to keep track of effort within a year, 
-## include a column n_samples which is the number of times a trap was sampled in that year
-codyn_beetles_inter <- beetles_counts %>% 
-  filter(!is.na(count)) %>%
-  select(siteID, plotID, trapID, year, collectDate, scientificName, count) %>%
+
+#calculate trap days in a year 
+yearly_trap_days <- bout_trap_days %>%
+  mutate(year = substr(eventID, 5,8)) %>%
   group_by(siteID, year) %>%
-  mutate(n_samples = n_distinct(trapID, plotID, collectDate)) %>%
-  select(-c(trapID, plotID, collectDate)) %>%
+  mutate(totalTrapDays = sum(totalTrapDays)) %>%
+  select(-eventID) %>%
+  distinct()
+
+codyn_beetles_inter <- beetles_site_bout %>%
+  mutate(year = substr(eventID, 5,8)) %>%
+  select(-c(totalTrapDays, eventID, collectDate)) %>%
   group_by(siteID, year, scientificName) %>%
-  mutate(abundance = sum(count)) %>%
-  select(-count) %>%
+  mutate(abundance = sum(abundance)) %>%
   distinct() %>%
+  left_join(yearly_trap_days, by = c("siteID", "year")) %>%
+  mutate(cpue = abundance/totalTrapDays) %>%
+  select(-c(abundance, totalTrapDays)) %>%
   ungroup()
+
+codyn_beetles_intra <- beetles_site_bout %>%
+  mutate(cpue = abundance/totalTrapDays) %>%
+  select(-c(abundance, totalTrapDays))
+
+#Only include data from sites that fit our sampling criteria of being sampled 
+#for at least 4 years with 3 replicates
+included_sites <- codyn_beetles_intra %>% 
+  mutate(year = year(collectDate)) %>% 
+  select(siteID, eventID, year) %>% 
+  distinct() %>% count(siteID, year) %>% 
+  filter(n > 2) %>% 
+  group_by(siteID) %>% 
+  filter(n_distinct(year) > 3) %>% 
+  pull(siteID) %>% unique()
+
+codyn_beetles_inter <- codyn_beetles_inter %>%
+  filter(siteID %in% included_sites)
+
+codyn_beetles_intra <- codyn_beetles_intra %>%
+  filter(siteID %in% included_sites)
+
+usethis::use_data(codyn_beetles_inter, codyn_beetles_intra)
 ```
 
-number of samples per site per year
+BAT data
 ```{r}
+BAT_beetles_intra <- codyn_beetles_intra %>%
+  rename(bout = eventID) %>%
+  mutate(year = lubridate::year(collectDate),
+         month = lubridate::month(collectDate),
+         day = lubridate::day(collectDate)) %>%
+  select(-collectDate) %>%
+  spread(scientificName, cpue)
 
+BAT_beetles_inter <- codyn_beetles_inter %>%
+  spread(scientificName, cpue) 
+
+usethis::use_data(BAT_beetles_intra, BAT_beetles_inter)
 ```
+
 
 #Taxonomic Accuracy
 Let's look at what percentage of the time sorting/pinning ID matched up with the expert

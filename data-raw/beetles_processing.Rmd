@@ -155,10 +155,18 @@ usethis::use_data(beetles_counts)
 Codyn Package formatting
 ```{r}
 # Calculate the total trapping days for a bout
-bout_trap_days <- beetles_counts %>%
+bout_trap_days_old <- beetles_counts %>%
   select(siteID, plotID, trapID, eventID, trappingDays) %>%
   distinct() %>%
   group_by(siteID, eventID) %>%
+  mutate(totalTrapDays = sum(trappingDays)) %>%
+  select(-c(trapID, plotID, trappingDays)) %>%
+  distinct()
+
+bout_trap_days <- beetles_counts %>%
+  select(siteID, plotID, trapID, collectDate, trappingDays) %>%
+  distinct() %>%
+  group_by(siteID, collectDate) %>%
   mutate(totalTrapDays = sum(trappingDays)) %>%
   select(-c(trapID, plotID, trappingDays)) %>%
   distinct()
@@ -167,13 +175,18 @@ bout_trap_days <- beetles_counts %>%
 #Intra annual variability
 beetles_site_bout <- beetles_counts %>% 
   filter(!is.na(count)) %>%
-  select(siteID, plotID, eventID, collectDate, scientificName, count) %>%
-  group_by(siteID, collectDate, eventID, scientificName) %>%
+  select(siteID, plotID, eventID, setDate, collectDate, scientificName, count) %>%
+  group_by(siteID, setDate, collectDate, eventID, scientificName) %>%
   mutate(abundance = sum(count)) %>%
   select(-c(plotID, count)) %>%
   distinct() %>%
   ungroup() %>%
-  left_join(bout_trap_days, by = c("siteID", "eventID")) 
+  left_join(bout_trap_days, by = c("siteID", "eventID")) %>%
+  #some plots have a different eventID even though they were set and collected on the same day 
+  #as other plots in the site, because those plots had another collection in the interim
+  #so we really want to get counts for a collectDate, not an eventID
+  group_by(siteID, collectDate, scientificName) %>%
+  mutate(new_abundance = sum(abundance), new_totalTrapDays = sum(totalTrapDays))
 
 #Inter annual variability
 

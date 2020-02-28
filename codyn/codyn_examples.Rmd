@@ -1,0 +1,55 @@
+---
+title: "codyn"
+author: "Kari Norman"
+date: "1/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(codyn)
+library(tidyverse) 
+```
+
+See Avolio et al 2019 for latest package info
+
+Comparing RACs:
+* species richness (lenght of the RAC) 
+* evenness (slope of the RAC, flatter = greater evenness)
+* rank changes/reordering
+* species loss
+* species gain
+
+Beetles
+```{r}
+load("data/codyn_beetles_inter.rda")
+load("data/codyn_beetles_intra.rda")
+
+beet_inter <- RAC_change(codyn_beetles_inter, 
+           time.var = "year", species.var = "scientificName", abundance.var = "cpue", replicate.var = "siteID")
+
+beet_change_intra <- RAC_change(codyn_beetles_intra,
+           time.var = "collectDate", species.var = "scientificName", abundance.var = "cpue", replicate.var = "siteID")
+```
+
+Mammals
+```{r}
+mam_inter <- readRDS("~/Documents/Projects/temporalNEON/data/Mammals/DATA_mammals_abs-abund-inter.rds") %>%
+  pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance")
+
+mam_intra <- readRDS("~/Documents/Projects/temporalNEON/data/Mammals/DATA_mammals_abs-abund-intra.rds") %>%
+  pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
+
+
+mam_change_inter <- RAC_change(mam_inter, 
+                             time.var = "year", species.var = "scientificName",
+                             abundance.var = "abundance", replicate.var = "siteID")
+
+mam_change_intra <- RAC_change(mam_intra, 
+                             time.var = "bout", species.var = "scientificName",
+                             abundance.var = "abundance", replicate.var = "siteID")
+```
+

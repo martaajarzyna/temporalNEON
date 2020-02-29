@@ -35,27 +35,25 @@ Grab necessary columns from different tables. Important column info:
 There are multiple levels of taxonomic identification, need to decide which level of rigor we care about (NEON id often just to family, taxonomist ID to species but only for a subset, DNA ID for even smaller subset).
 
 ```{r}
+#function for finding the statistical mode
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
 data <- beetles_raw$bet_fielddata %>%
   filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
   select(sampleID, domainID, siteID, plotID, trapID, setDate, collectDate, eventID, trappingDays) %>%
   #eventID's are inconsistently separated by periods, so remove
   mutate(eventID = str_remove_all(eventID, "[.]")) %>%
-  #for some eventID's (bouts) collection happened over two days, 
-  #change collectDate to just the first day so we have a single collectionDate
-  group_by(siteID, plotID, eventID) %>%
-  mutate(collectDate = case_when(
-    n_distinct(collectDate) > 1 ~ unique(collectDate)[1],
-    TRUE ~ collectDate
-  )) %>% 
-  ungroup()
+  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1))
 
 #Find the traps that have multiple collectDates/bouts for the same setDate
 #need to calculate their trap days from the previous collectDate, not the setDate
 adjTrappingDays <- data %>%
-  select(plotID, trapID, setDate, collectDate) %>%
-  group_by_at(vars(-collectDate)) %>%
+  select(plotID, trapID, setDate, collectDate, trappingDays, eventID) %>%
+  group_by_at(vars(-collectDate, -trappingDays, -eventID)) %>%
   filter(n_distinct(collectDate) > 1) %>%
-  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1)) %>%
   group_by(plotID, trapID, setDate) %>%
   mutate(diffTrappingDays = trappingDays - min(trappingDays)) %>%
   mutate(adjTrappingDays = case_when(
@@ -65,14 +63,25 @@ adjTrappingDays <- data %>%
   select(-c(trappingDays, diffTrappingDays))
 
 data <- data %>%
-  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1)) %>%
   #update with adjusted trapping days where needed
   left_join(adjTrappingDays) %>%
   mutate(trappingDays = case_when(
     !is.na(adjTrappingDays) ~ adjTrappingDays,
     TRUE ~ trappingDays
   )) %>%
-  select(-adjTrappingDays) %>%
+  select(-adjTrappingDays, -setDate) %>%
+  #for some eventID's (bouts) collection happened over two days,
+  #change collectDate to the date that majority of traps were collected on
+  group_by(eventID) %>%
+  mutate(collectDate = case_when(
+    n_distinct(collectDate) > 1 ~ Mode(collectDate), #need to fix Mode because we want the mode of the distinct grouping
+    TRUE ~ collectDate
+  )) %>%
+  ungroup() %>%
+  #there are also some sites for which all traps were set and collect on the same date, but have multiple eventID's
+  #we want to consider that as all one bout so we'll just create a new ID based on the site and collectDate
+  unite(boutID, siteID, collectDate, remove = FALSE) %>%
+  select(-eventID) %>%
   #and join to sample data
   left_join(beetles_raw$bet_sorting %>%
               filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch

@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(codyn)
 library(tidyverse) 
+library(lubridate)
+library(ggpubr)
 ```
 
 See Avolio et al 2019 for latest package info
@@ -28,11 +30,13 @@ Beetles
 load("data/codyn_beetles_inter.rda")
 load("data/codyn_beetles_intra.rda")
 
-beet_inter <- RAC_change(codyn_beetles_inter, 
+beet_change_inter <- RAC_change(codyn_beetles_inter, 
            time.var = "year", species.var = "scientificName", abundance.var = "cpue", replicate.var = "siteID")
 
-beet_change_intra <- RAC_change(codyn_beetles_intra,
-           time.var = "collectDate", species.var = "scientificName", abundance.var = "cpue", replicate.var = "siteID")
+beet_change_intra <- RAC_change(codyn_beetles_intra %>% rename(bout = collectDate),
+           time.var = "bout", species.var = "scientificName", abundance.var = "cpue", replicate.var = "siteID") %>%
+  #remove bout comparisons that cross years
+  filter(year(bout) == year(bout2))
 ```
 
 Mammals
@@ -50,6 +54,137 @@ mam_change_inter <- RAC_change(mam_inter,
 
 mam_change_intra <- RAC_change(mam_intra, 
                              time.var = "bout", species.var = "scientificName",
-                             abundance.var = "abundance", replicate.var = "siteID")
+                             abundance.var = "abundance", replicate.var = "siteID") %>%
+  #remove bout comparisons that cross years
+  filter(substr(bout, 1, 4) == substr(bout2, 1, 4))
 ```
 
+Fish
+```{r}
+fish_inter <- readRDS("~/Documents/Projects/temporalNEON/data/fish/fsh_BAT_inter.rds") %>%
+  pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance")
+
+fish_intra <- readRDS("~/Documents/Projects/temporalNEON/data/fish/fsh_BAT_intra.rds") %>%
+  pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
+
+fish_change_inter <- RAC_change(fish_inter, 
+                             time.var = "year", species.var = "scientificName",
+                             abundance.var = "abundance", replicate.var = "siteID")
+
+fish_change_intra <- RAC_change(fish_intra, 
+                             time.var = "bout", species.var = "scientificName",
+                             abundance.var = "abundance", replicate.var = "siteID") %>%
+  #remove bout comparisons that cross years
+  filter(substr(bout, 1, 4) == substr(bout2, 1, 4))
+```
+
+Inverts
+```{r}
+# invert_inter <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_abundance_year_BAT.csv") %>%
+#   pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance")
+# 
+# invert_intra <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_abundance_month_BAT.csv") %>%
+#   pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
+# 
+# invert_other <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_abundance_codyn.csv")
+# 
+# invert_inter <- RAC_change(invert_inter, 
+#                              time.var = "year", species.var = "scientificName",
+#                              abundance.var = "abundance", replicate.var = "siteID")
+# 
+# invert_intra <- RAC_change(invert_intra, 
+#                              time.var = "bout", species.var = "scientificName",
+#                              abundance.var = "abundance", replicate.var = "siteID")
+```
+
+Get all taxa and data in same dataframe
+Right now this creates a dataframe that compares intra annual variability to the site average interannual variability
+```{r}
+library(rgdal)
+neon <- readOGR(here::here("Temporal_replication/shapefiles"), layer = "NEON_Field_Sites")
+sites <- neon@data
+
+join_taxa_df <- function(df_intra, df_inter){
+  change_vars <- c("richness_change", "evenness_change", "rank_change", "gains", "losses")
+  taxa_join <- df_intra %>%
+    pivot_longer(change_vars, names_to = "variable", values_to = "intra") %>% 
+    group_by(siteID, variable) %>%
+    mutate(intra_site_mean = mean(na.omit(intra))) %>%
+    left_join(df_inter %>% 
+                #mutate(year = as.numeric(as.character(year))) %>%
+                pivot_longer(change_vars, names_to = "variable", values_to = "inter") %>%
+                group_by(siteID, variable) %>% 
+                mutate(inter_site_mean = mean(na.omit(inter))) %>%
+                select(siteID, variable, inter_site_mean) %>%
+                distinct(), 
+              by = c("siteID", "variable"))
+
+}
+
+codyn_df <- bind_rows(join_taxa_df(beet_change_intra, beet_change_inter) %>% mutate(taxa = "beetle"),
+                      join_taxa_df(mam_change_intra, mam_change_inter) %>% mutate(taxa = "mammal"),
+                      join_taxa_df(fish_change_intra, fish_change_inter) %>% mutate(taxa = "fish")) %>%
+  left_join(sites %>% select(siteID = SiteID, latitude = Latitude, longitude = Longitude), by = "siteID")
+```
+
+#Plots 
+
+Inter vs intra annual variability
+```{r}
+taxa_names <- c("beetle", "mammal", "fish")
+
+plot_inter_intra <- function(taxa_name, data = codyn_df){
+  change_vars <- c("richness_change", "evenness_change", "rank_change", "gains", "losses")
+  
+  ### intra + inter
+  # richness_change
+  intra_v_inter <- data %>%
+    filter(taxa == taxa_name) %>%
+    ggplot(aes(inter_site_mean, intra))+
+    geom_point(size=3)+
+    geom_smooth(method="glm")+
+    geom_point(aes(inter_site_mean, intra_site_mean), col="red", size=3)+
+    geom_smooth(aes(inter_site_mean, intra_site_mean), col="red",method="glm")+
+    facet_grid(. ~ variable, scales = "free") +
+    theme(panel.background = element_rect(fill = 'white', colour = 'grey85'),
+          panel.border = element_rect(fill=NA, colour = "white", size=1),
+          axis.line = element_line(color = 'black', size=2.5),
+          plot.title = element_text(size=20, vjust=2, family="sans"),
+          axis.text.x = element_text(colour='black',size=20),
+          axis.text.y = element_text(colour='black',size=20),
+          axis.title.x = element_text(colour='black',size=25),
+          axis.title.y = element_text(colour='black',size=25),
+          axis.ticks = element_line(color = 'black', size=2.5),
+          axis.ticks.length=unit(0.5,"cm"),
+          legend.position="none",
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+  
+  intra_v_inter_means <- data %>%
+    filter(taxa == taxa_name) %>%
+    ggplot(aes(inter_site_mean, intra_site_mean))+
+    geom_point(col="red", size=3)+
+    geom_smooth(col="red",method="glm")+
+    facet_grid(. ~ variable, scales = "free") +
+    theme(panel.background = element_rect(fill = 'white', colour = 'grey85'),
+          panel.border = element_rect(fill=NA, colour = "white", size=1),
+          axis.line = element_line(color = 'black', size=2.5),
+          plot.title = element_text(size=20, vjust=2, family="sans"),
+          axis.text.x = element_text(colour='black',size=20),
+          axis.text.y = element_text(colour='black',size=20),
+          axis.title.x = element_text(colour='black',size=25),
+          axis.title.y = element_text(colour='black',size=25),
+          axis.ticks = element_line(color = 'black', size=2.5),
+          axis.ticks.length=unit(0.5,"cm"),
+          legend.position="none",
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank())
+  
+  plot <- ggarrange(intra_v_inter, intra_v_inter_means, nrow =2)
+  ggsave(file=paste0(here::here("codyn/figures"), "/", taxa_name, "-intra-inter.jpeg"), plot, width=30,height=10, dpi=300)
+}
+
+map(taxa_names, plot_inter_intra)
+```
+
+Plot 

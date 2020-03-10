@@ -129,22 +129,22 @@ codyn_df <- bind_rows(join_taxa_df(beet_change_intra, beet_change_inter) %>% mut
 
 #Plots 
 
-Inter vs intra annual variability
+Plot inter vs intra annual variability and intra annual variability by latitude
 ```{r}
 taxa_names <- c("beetle", "mammal", "fish")
 
-plot_inter_intra <- function(taxa_name, data = codyn_df){
+plot_comparisons <- function(taxa_name, x_axis, data = codyn_df){
   change_vars <- c("richness_change", "evenness_change", "rank_change", "gains", "losses")
   
   ### intra + inter
   # richness_change
-  intra_v_inter <- data %>%
+  plot <- data %>%
     filter(taxa == taxa_name) %>%
-    ggplot(aes(inter_site_mean, intra))+
+    ggplot(aes(.data[[x_axis]], intra))+
     geom_point(size=3)+
     geom_smooth(method="glm")+
-    geom_point(aes(inter_site_mean, intra_site_mean), col="red", size=3)+
-    geom_smooth(aes(inter_site_mean, intra_site_mean), col="red",method="glm")+
+    geom_point(aes(.data[[x_axis]], intra_site_mean), col="red", size=3)+
+    geom_smooth(aes(.data[[x_axis]], intra_site_mean), col="red",method="glm")+
     facet_grid(. ~ variable, scales = "free") +
     theme(panel.background = element_rect(fill = 'white', colour = 'grey85'),
           panel.border = element_rect(fill=NA, colour = "white", size=1),
@@ -160,9 +160,9 @@ plot_inter_intra <- function(taxa_name, data = codyn_df){
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank())
   
-  intra_v_inter_means <- data %>%
+  mean_plot <- data %>%
     filter(taxa == taxa_name) %>%
-    ggplot(aes(inter_site_mean, intra_site_mean))+
+    ggplot(aes(.data[[x_axis]], intra_site_mean))+
     geom_point(col="red", size=3)+
     geom_smooth(col="red",method="glm")+
     facet_grid(. ~ variable, scales = "free") +
@@ -180,11 +180,11 @@ plot_inter_intra <- function(taxa_name, data = codyn_df){
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank())
   
-  plot <- ggarrange(intra_v_inter, intra_v_inter_means, nrow =2)
-  ggsave(file=paste0(here::here("codyn/figures"), "/", taxa_name, "-intra-inter.jpeg"), plot, width=30,height=10, dpi=300)
+  plot_comb <- ggarrange(plot, mean_plot, nrow =2)
+  plot_name <- ifelse(x_axis == "inter_site_mean", "-intra-inter.jpeg", "-latitude.jpeg")
+  ggsave(file=paste0(here::here("codyn/figures"), "/", taxa_name, plot_name), plot, width=30,height=10, dpi=300)
 }
 
-map(taxa_names, plot_inter_intra)
+map(taxa_names, plot_comparisons, x_axis = "inter_site_mean")
+map(taxa_names, plot_comparisons, x_axis = "latitude")
 ```
-
-Plot 

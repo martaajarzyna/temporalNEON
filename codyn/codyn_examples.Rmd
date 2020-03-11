@@ -30,6 +30,8 @@ Beetles
 load("data/codyn_beetles_inter.rda")
 load("data/codyn_beetles_intra.rda")
 
+#this data has already excluded sites that were not sampled according to our cutoff (four years of data with at least 3 replicates in a year)
+
 beet_change_inter <- RAC_change(codyn_beetles_inter, 
            time.var = "year", species.var = "scientificName", abundance.var = "cpue", replicate.var = "siteID")
 
@@ -41,11 +43,17 @@ beet_change_intra <- RAC_change(codyn_beetles_intra %>% rename(bout = collectDat
 
 Mammals
 ```{r}
+#sites that meet sampling frequency criteria 
+mam_inc_sites <- readRDS(file="data/Mammals/NEONsites_tempreplic_4yrs.rds") %>% 
+  rename(siteID = SiteID)
+
 mam_inter <- readRDS("~/Documents/Projects/temporalNEON/data/Mammals/DATA_mammals_abs-abund-inter.rds") %>%
-  pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance")
+  pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance") %>%
+  filter(siteID %in% mam_inc_sites$siteID)
 
 mam_intra <- readRDS("~/Documents/Projects/temporalNEON/data/Mammals/DATA_mammals_abs-abund-intra.rds") %>%
-  pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
+  pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance") %>%
+  filter(siteID %in% mam_inc_sites$siteID)
 
 
 mam_change_inter <- RAC_change(mam_inter, 
@@ -67,7 +75,12 @@ fish_inter <- readRDS("~/Documents/Projects/temporalNEON/data/fish/fsh_BAT_inter
 fish_intra <- readRDS("~/Documents/Projects/temporalNEON/data/fish/fsh_BAT_intra.rds") %>%
   pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
 
-fish_change_inter <- RAC_change(fish_inter, 
+#sites that match sampling criteria
+fish_inc_sites <- fish_intra %>% 
+  group_by(siteID) %>% 
+  filter(n_distinct(bout) > 2, n_distinct(year) > 3)
+
+fish_change_inter <- RAC_change(fish_inter %>% filter(siteID %in% fish_inc_sites$siteID), 
                              time.var = "year", species.var = "scientificName",
                              abundance.var = "abundance", replicate.var = "siteID")
 
@@ -80,21 +93,25 @@ fish_change_intra <- RAC_change(fish_intra,
 
 Inverts
 ```{r}
-# invert_inter <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_abundance_year_BAT.csv") %>%
-#   pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance")
-# 
-# invert_intra <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_abundance_month_BAT.csv") %>%
-#   pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
-# 
-# invert_other <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_abundance_codyn.csv")
-# 
-# invert_inter <- RAC_change(invert_inter, 
-#                              time.var = "year", species.var = "scientificName",
-#                              abundance.var = "abundance", replicate.var = "siteID")
-# 
-# invert_intra <- RAC_change(invert_intra, 
-#                              time.var = "bout", species.var = "scientificName",
-#                              abundance.var = "abundance", replicate.var = "siteID")
+invert_inter <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_year_BAT.csv") %>%
+  pivot_longer(-c(siteID, year), names_to = "scientificName", values_to = "abundance")
+
+invert_intra <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts_table_bout_BAT.csv") %>%
+  group_by(siteID, bout, year, month) %>%
+  summarise_all(funs(sum)) %>%
+  pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
+
+invert_inc_sites <- fish_intra %>% 
+  group_by(siteID) %>% 
+  filter(n_distinct(bout) > 2, n_distinct(year) > 3)
+
+invert_change_inter <- RAC_change(invert_inter %>% filter(siteID %in% invert_inc_sites$siteID),
+                             time.var = "year", species.var = "scientificName",
+                             abundance.var = "abundance", replicate.var = "siteID")
+
+invert_change_intra <- RAC_change(invert_intra %>% filter(siteID %in% invert_inc_sites$siteID),
+                             time.var = "bout", species.var = "scientificName",
+                             abundance.var = "abundance", replicate.var = "siteID")
 ```
 
 Get all taxa and data in same dataframe
@@ -123,7 +140,8 @@ join_taxa_df <- function(df_intra, df_inter){
 
 codyn_df <- bind_rows(join_taxa_df(beet_change_intra, beet_change_inter) %>% mutate(taxa = "beetle"),
                       join_taxa_df(mam_change_intra, mam_change_inter) %>% mutate(taxa = "mammal"),
-                      join_taxa_df(fish_change_intra, fish_change_inter) %>% mutate(taxa = "fish")) %>%
+                      join_taxa_df(fish_change_intra, fish_change_inter) %>% mutate(taxa = "fish"),
+                      join_taxa_df(invert_change_intra, invert_change_inter) %>% mutate(taxa = "invert")) %>%
   left_join(sites %>% select(siteID = SiteID, latitude = Latitude, longitude = Longitude), by = "siteID")
 ```
 
@@ -131,21 +149,22 @@ codyn_df <- bind_rows(join_taxa_df(beet_change_intra, beet_change_inter) %>% mut
 
 Plot inter vs intra annual variability and intra annual variability by latitude
 ```{r}
-taxa_names <- c("beetle", "mammal", "fish")
+taxa_names <- c("beetle", "mammal", "fish", "invert")
 
 plot_comparisons <- function(taxa_name, x_axis, data = codyn_df){
-  change_vars <- c("richness_change", "evenness_change", "rank_change", "gains", "losses")
+  change_vars <- c("richness_change", "evenness_change", "rank_change")
   
   ### intra + inter
   # richness_change
   plot <- data %>%
-    filter(taxa == taxa_name) %>%
+    filter(taxa == taxa_name, variable %in% change_vars) %>%
     ggplot(aes(.data[[x_axis]], intra))+
     geom_point(size=3)+
     geom_smooth(method="glm")+
     geom_point(aes(.data[[x_axis]], intra_site_mean), col="red", size=3)+
     geom_smooth(aes(.data[[x_axis]], intra_site_mean), col="red",method="glm")+
     facet_grid(. ~ variable, scales = "free") +
+    xlab(x_axis) +
     theme(panel.background = element_rect(fill = 'white', colour = 'grey85'),
           panel.border = element_rect(fill=NA, colour = "white", size=1),
           axis.line = element_line(color = 'black', size=2.5),
@@ -157,15 +176,17 @@ plot_comparisons <- function(taxa_name, x_axis, data = codyn_df){
           axis.ticks = element_line(color = 'black', size=2.5),
           axis.ticks.length=unit(0.5,"cm"),
           legend.position="none",
+          strip.text = element_text(size = 15),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank())
   
   mean_plot <- data %>%
-    filter(taxa == taxa_name) %>%
+    filter(taxa == taxa_name, variable %in% change_vars) %>%
     ggplot(aes(.data[[x_axis]], intra_site_mean))+
     geom_point(col="red", size=3)+
     geom_smooth(col="red",method="glm")+
     facet_grid(. ~ variable, scales = "free") +
+    xlab(x_axis) +
     theme(panel.background = element_rect(fill = 'white', colour = 'grey85'),
           panel.border = element_rect(fill=NA, colour = "white", size=1),
           axis.line = element_line(color = 'black', size=2.5),
@@ -177,12 +198,15 @@ plot_comparisons <- function(taxa_name, x_axis, data = codyn_df){
           axis.ticks = element_line(color = 'black', size=2.5),
           axis.ticks.length=unit(0.5,"cm"),
           legend.position="none",
+          strip.text = element_text(size = 15),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank())
   
   plot_comb <- ggarrange(plot, mean_plot, nrow =2)
   plot_name <- ifelse(x_axis == "inter_site_mean", "-intra-inter.jpeg", "-latitude.jpeg")
-  ggsave(file=paste0(here::here("codyn/figures"), "/", taxa_name, plot_name), plot, width=30,height=10, dpi=300)
+  ggsave(file=paste0(here::here("codyn/figures"), "/", taxa_name, plot_name),
+         plot_comb, width=15, height=10, dpi=300)
+  #width=30,height=10, 
 }
 
 map(taxa_names, plot_comparisons, x_axis = "inter_site_mean")

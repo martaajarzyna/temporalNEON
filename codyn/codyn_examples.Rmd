@@ -101,7 +101,7 @@ invert_intra <- read_csv("~/Documents/Projects/temporalNEON/data/inverts/inverts
   summarise_all(funs(sum)) %>%
   pivot_longer(-c(siteID, year, month, bout), names_to = "scientificName", values_to = "abundance")
 
-invert_inc_sites <- fish_intra %>% 
+invert_inc_sites <- invert_intra %>% 
   group_by(siteID) %>% 
   filter(n_distinct(bout) > 2, n_distinct(year) > 3)
 

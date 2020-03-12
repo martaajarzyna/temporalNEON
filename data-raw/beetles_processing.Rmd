@@ -35,27 +35,25 @@ Grab necessary columns from different tables. Important column info:
 There are multiple levels of taxonomic identification, need to decide which level of rigor we care about (NEON id often just to family, taxonomist ID to species but only for a subset, DNA ID for even smaller subset).
 
 ```{r}
+#function for finding the statistical mode
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
 data <- beetles_raw$bet_fielddata %>%
   filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
   select(sampleID, domainID, siteID, plotID, trapID, setDate, collectDate, eventID, trappingDays) %>%
   #eventID's are inconsistently separated by periods, so remove
   mutate(eventID = str_remove_all(eventID, "[.]")) %>%
-  #for some eventID's (bouts) collection happened over two days, 
-  #change collectDate to just the first day so we have a single collectionDate
-  group_by(siteID, plotID, eventID) %>%
-  mutate(collectDate = case_when(
-    n_distinct(collectDate) > 1 ~ unique(collectDate)[1],
-    TRUE ~ collectDate
-  )) %>% 
-  ungroup()
+  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1))
 
 #Find the traps that have multiple collectDates/bouts for the same setDate
 #need to calculate their trap days from the previous collectDate, not the setDate
 adjTrappingDays <- data %>%
-  select(plotID, trapID, setDate, collectDate) %>%
-  group_by_at(vars(-collectDate)) %>%
+  select(plotID, trapID, setDate, collectDate, trappingDays, eventID) %>%
+  group_by_at(vars(-collectDate, -trappingDays, -eventID)) %>%
   filter(n_distinct(collectDate) > 1) %>%
-  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1)) %>%
   group_by(plotID, trapID, setDate) %>%
   mutate(diffTrappingDays = trappingDays - min(trappingDays)) %>%
   mutate(adjTrappingDays = case_when(
@@ -65,14 +63,22 @@ adjTrappingDays <- data %>%
   select(-c(trappingDays, diffTrappingDays))
 
 data <- data %>%
-  mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1)) %>%
   #update with adjusted trapping days where needed
   left_join(adjTrappingDays) %>%
   mutate(trappingDays = case_when(
     !is.na(adjTrappingDays) ~ adjTrappingDays,
     TRUE ~ trappingDays
   )) %>%
-  select(-adjTrappingDays) %>%
+  select(-adjTrappingDays, -setDate) %>%
+  #for some eventID's (bouts) collection happened over two days,
+  #change collectDate to the date that majority of traps were collected on
+  group_by(eventID) %>%
+  mutate(collectDate = Mode(collectDate)) %>%
+  ungroup() %>%
+  #there are also some sites for which all traps were set and collect on the same date, but have multiple eventID's
+  #we want to consider that as all one bout so we'll just create a new ID based on the site and collectDate
+  unite(boutID, siteID, collectDate, remove = FALSE) %>%
+  select(-eventID) %>%
   #and join to sample data
   left_join(beetles_raw$bet_sorting %>%
               filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch
@@ -114,13 +120,18 @@ data_pin <- data_pin %>%
 
 Join expert data to existing pinning and sorting data
 ```{r}
+#There are ~10 individualID's for which experts ID'd more than one species (not all experts agreed), we want to exclude those expert ID's as per Katie Levan's suggestion
+ex_expert_id <- beetles_raw$bet_expertTaxonomistIDProcessed %>% 
+  group_by(individualID) %>% 
+  filter(n_distinct(taxonID) > 1) %>% 
+  pull(individualID)
+
 # Add expert taxonomy info, where available
 data_expert <- left_join(data_pin, 
-                      select(beetles_raw$bet_expertTaxonomistIDProcessed,individualID,taxonID,scientificName,taxonRank,identificationQualifier), 
+                      select(beetles_raw$bet_expertTaxonomistIDProcessed,
+                             individualID,taxonID,scientificName,taxonRank,identificationQualifier) %>%
+                        filter(!individualID %in% ex_expert_id), #exclude ID's that have unresolved expert taxonomy
                       by = 'individualID', na_matches = "never") %>% distinct()
- 
-#For some reason there are ~10 individualID's for which experts ID'd more than one species, that's why 10 additional records are added by the join
-#beetles_raw$bet_expertTaxonomistIDProcessed %>% group_by(individualID) %>% filter(n_distinct(taxonID) > 1) %>% View()
 
 # Replacement old taxon info with expert info, where available
 # NOTE - This is repetitive with the code snippet above, and if you want to do it this way you can just combine the calls into one chunk. BUT, you may
@@ -156,38 +167,37 @@ Codyn Package formatting
 ```{r}
 # Calculate the total trapping days for a bout
 bout_trap_days <- beetles_counts %>%
-  select(siteID, plotID, trapID, eventID, trappingDays) %>%
+  select(siteID, plotID, trapID, boutID, trappingDays) %>%
   distinct() %>%
-  group_by(siteID, eventID) %>%
+  group_by(siteID, boutID) %>%
   mutate(totalTrapDays = sum(trappingDays)) %>%
   select(-c(trapID, plotID, trappingDays)) %>%
   distinct()
-  
 
 #Intra annual variability
 beetles_site_bout <- beetles_counts %>% 
   filter(!is.na(count)) %>%
-  select(siteID, plotID, eventID, collectDate, scientificName, count) %>%
-  group_by(siteID, collectDate, eventID, scientificName) %>%
+  select(siteID, boutID, collectDate, scientificName, count) %>%
+  group_by(siteID, collectDate, boutID, scientificName) %>%
   mutate(abundance = sum(count)) %>%
-  select(-c(plotID, count)) %>%
+  select(-count) %>%
   distinct() %>%
   ungroup() %>%
-  left_join(bout_trap_days, by = c("siteID", "eventID")) 
+  left_join(bout_trap_days, by = c("siteID", "boutID"))
 
 #Inter annual variability
 
 #calculate trap days in a year 
 yearly_trap_days <- bout_trap_days %>%
-  mutate(year = substr(eventID, 5,8)) %>%
+  mutate(year = substr(boutID, 6,9)) %>%
   group_by(siteID, year) %>%
   mutate(totalTrapDays = sum(totalTrapDays)) %>%
-  select(-eventID) %>%
+  select(-boutID) %>%
   distinct()
 
 codyn_beetles_inter <- beetles_site_bout %>%
-  mutate(year = substr(eventID, 5,8)) %>%
-  select(-c(totalTrapDays, eventID, collectDate)) %>%
+  mutate(year = substr(boutID, 6,9)) %>%
+  select(-c(totalTrapDays, boutID, collectDate)) %>%
   group_by(siteID, year, scientificName) %>%
   mutate(abundance = sum(abundance)) %>%
   distinct() %>%
@@ -204,7 +214,7 @@ codyn_beetles_intra <- beetles_site_bout %>%
 #for at least 4 years with 3 replicates
 included_sites <- codyn_beetles_intra %>% 
   mutate(year = year(collectDate)) %>% 
-  select(siteID, eventID, year) %>% 
+  select(siteID, boutID, year) %>% 
   distinct() %>% count(siteID, year) %>% 
   filter(n > 2) %>% 
   group_by(siteID) %>% 
@@ -223,7 +233,6 @@ usethis::use_data(codyn_beetles_inter, codyn_beetles_intra)
 BAT data
 ```{r}
 BAT_beetles_intra <- codyn_beetles_intra %>%
-  rename(bout = eventID) %>%
   mutate(year = lubridate::year(collectDate),
          month = lubridate::month(collectDate),
          day = lubridate::day(collectDate)) %>%

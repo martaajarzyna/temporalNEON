@@ -203,6 +203,7 @@ fsh_dat_wide_CPUE <- fsh_aggregate_mod2 %>%
   dplyr::select(-n_obs, -number_of_fish)
 
 ##############################################################################################################
+# to extract fish data with required temporal structure for temporal change analyses 
 # read the fieldData from NEON
 fsh_fielddata <- readxl::read_excel(path = "fsh2020.xlsx", sheet = "fsh_fieldData")
 
@@ -260,7 +261,7 @@ fsh.sites.2mon.3yr <- fsh.data.2mon.3yr %>%
 # how many sites have at least three yrs of data collection, two bouts in each 
 dplyr::n_distinct(fsh.sites.2mon.3yr$siteID)
 
-save(fsh.sites.2mon.3yr, file = "fsh.sites.2mon.3yr.RData")
+save(fsh.sites.2mon.3yr, file = "fsh.sites.2mon.3yr.RData")  
 
 #############################
 

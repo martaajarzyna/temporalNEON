@@ -27,13 +27,8 @@ if (file.exists(beetle_dir)){
 }
 ```
 
-Grab necessary columns from different tables. Important column info:
-* sampleID: unique ID for each combination of domainID, siteID, plotID, trapID, and collectDate (unique ID for bet_fielddata table)
-* subsampleID: unique ID for each group of individuals, multiple per sample (unique ID for bet_sorting); unclear why there are muliple entries for the same classification
-* individualID: unique ID for each individual identified by taxonomists (unique ID for bet_parataxonimist table)
-
-There are multiple levels of taxonomic identification, need to decide which level of rigor we care about (NEON id often just to family, taxonomist ID to species but only for a subset, DNA ID for even smaller subset).
-
+#### Clean and format raw data (following Tidy Neon code)
+Clean up Data
 ```{r}
 #function for finding the statistical mode
 Mode <- function(x) {
@@ -42,10 +37,11 @@ Mode <- function(x) {
 }
 
 data <- beetles_raw$bet_fielddata %>%
-  filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
+  #filter(sampleCollected == "Y") %>% #there's an entry for every trap, whether or not they got samples, only want ones with samples
   select(sampleID, domainID, siteID, plotID, trapID, setDate, collectDate, eventID, trappingDays) %>%
   #eventID's are inconsistently separated by periods, so remove
   mutate(eventID = str_remove_all(eventID, "[.]")) %>%
+  # calculate a new trapdays column
   mutate(trappingDays = interval(ymd(setDate), ymd(collectDate)) %/% days(1))
 
 #Find the traps that have multiple collectDates/bouts for the same setDate
@@ -82,23 +78,23 @@ data <- data %>%
   #and join to sample data
   left_join(beetles_raw$bet_sorting %>%
               filter(sampleType %in% c("carabid", "other carabid")) %>% #only want carabid samples, not bycatch
-              select(sampleID, subsampleID, sampleType, taxonID, scientificName, taxonRank, individualCount,identificationQualifier),
-            by = "sampleID") %>%
-  filter(!is.na(subsampleID)) #even though they were marked a sampled, some collection times don't acutally have any samples
+              select(sampleID, subsampleID, sampleType, taxonID, scientificName, taxonRank, individualCount),
+            by = "sampleID") #%>%
+  #filter(!is.na(subsampleID)) #even though they were marked a sampled, some collection times don't actually have any samples
  
 ```
 
-Join taxonomic data from pinning with the sorting data
+Clean up taxonomic data
+- prioritize expert first, the pinning, then sorting
 ```{r}
 # Replace sorting taxon info with pinning taxon info (people that pin specimens are more experienced with taxonomy), where available
 data_pin <- data %>%
-  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank,identificationQualifier), by = "subsampleID") %>%
+  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, taxonID, scientificName, taxonRank), by = "subsampleID") %>%
   mutate_if(is.factor, as.character) %>%
   mutate(taxonID = ifelse(is.na(taxonID.y), taxonID.x, taxonID.y)) %>%
   mutate(taxonRank = ifelse(is.na(taxonRank.y), taxonRank.x, taxonRank.y)) %>%
   mutate(scientificName = ifelse(is.na(scientificName.y), scientificName.x, scientificName.y)) %>%
   mutate(identificationSource = ifelse(is.na(scientificName.y), "sort", "pin")) %>%
-  mutate (identificationQualifier = ifelse(is.na(taxonID.y), identificationQualifier.x, identificationQualifier.y)) %>%
   select(-ends_with(".x"), -ends_with(".y"))
 
 #some subsamples weren't fully ID'd by the pinners, so we have to recover the unpinned-individuals
@@ -120,7 +116,7 @@ data_pin <- data_pin %>%
 
 Join expert data to existing pinning and sorting data
 ```{r}
-#There are ~10 individualID's for which experts ID'd more than one species (not all experts agreed), we want to exclude those expert ID's as per Katie Levan's suggestion
+#There are some individualID's for which experts ID'd more than one species we exclude them
 ex_expert_id <- beetles_raw$bet_expertTaxonomistIDProcessed %>% 
   group_by(individualID) %>% 
   filter(n_distinct(taxonID) > 1) %>% 
@@ -129,21 +125,17 @@ ex_expert_id <- beetles_raw$bet_expertTaxonomistIDProcessed %>%
 # Add expert taxonomy info, where available
 data_expert <- left_join(data_pin, 
                       select(beetles_raw$bet_expertTaxonomistIDProcessed,
-                             individualID,taxonID,scientificName,taxonRank,identificationQualifier) %>%
+                             individualID,taxonID,scientificName,taxonRank) %>%
                         filter(!individualID %in% ex_expert_id), #exclude ID's that have unresolved expert taxonomy
                       by = 'individualID', na_matches = "never") %>% distinct()
 
 # Replacement old taxon info with expert info, where available
-# NOTE - This is repetitive with the code snippet above, and if you want to do it this way you can just combine the calls into one chunk. BUT, you may
-#     want to do more than this, as it is *just* a replacement of IDs for individual beetles that an expert identified. If the expert identified
-#           a sample as COLSP6 instead of CARSP14, though, then all CARSP14 from that trap on that date should probably be updated to COLSP6…
 data_expert <- data_expert %>%
   mutate_if(is.factor, as.character) %>%
   mutate(taxonID = ifelse(is.na(taxonID.y), taxonID.x, taxonID.y)) %>%
   mutate(taxonRank = ifelse(is.na(taxonRank.y), taxonRank.x, taxonRank.y)) %>%
   mutate(scientificName = ifelse(is.na(scientificName.y), scientificName.x, scientificName.y)) %>%
   mutate(identificationSource = ifelse(is.na(scientificName.y), identificationSource, "expert")) %>%
-  mutate (identificationQualifier = ifelse(is.na(taxonID.y), identificationQualifier.x, identificationQualifier.y)) %>%
   select(-ends_with(".x"), -ends_with(".y"))
 
 beetles_data <- data_expert
@@ -153,7 +145,7 @@ usethis::use_data(beetles_data)
 Get raw counts table
 ```{r}
 beetles_counts <- beetles_data %>%
-  select(-c(subsampleID, sampleType, individualID, identificationSource, identificationQualifier)) %>%
+  select(-c(subsampleID, sampleType, individualID, identificationSource)) %>%
   group_by_at(vars(-individualCount)) %>%
   summarise(count = sum(individualCount)) %>%
   ungroup()
@@ -165,6 +157,10 @@ usethis::use_data(beetles_counts)
 
 Codyn Package formatting
 ```{r}
+beetles_counts <- beetles_counts %>%
+  #remove traps with no samples
+  filter(!is.na(taxonID))
+
 # Calculate the total trapping days for a bout
 bout_trap_days <- beetles_counts %>%
   select(siteID, plotID, trapID, boutID, trappingDays) %>%
@@ -244,147 +240,3 @@ BAT_beetles_inter <- codyn_beetles_inter %>%
 
 usethis::use_data(BAT_beetles_intra, BAT_beetles_inter)
 ```
-
-
-#Taxonomic Accuracy
-Let's look at what percentage of the time sorting/pinning ID matched up with the expert
-```{r}
-taxon_comp <- data_expert %>% 
-  filter(!is.na(individualID)) %>%
-  select(subsampleID, individualID, taxonID, identificationSource) %>%
-  left_join(data %>% select(subsampleID, sortingTaxonID = taxonID), by = "subsampleID") %>%
-  left_join(beetles_raw$bet_parataxonomistID %>% select(subsampleID, individualID, pinningTaxonID = taxonID), by = c("subsampleID", "individualID")) %>%
-  left_join(beetles_raw$bet_expertTaxonomistIDProcessed %>% select(individualID, expertTaxonID = taxonID), by = "individualID") %>%
-  distinct()
-```
-
-What percentage of individuals were ID'd by the expert as the same as other levels?
-```{r}
-taxon_comp %>%
-  mutate_if(is.factor, as.character) %>%
-  filter(identificationSource == "expert", expertTaxonID == pinningTaxonID, pinningTaxonID == sortingTaxonID) %>%
-  dim() %>%
-  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "expert"))[1]
-```
-
-Of those ID'd by the expert, what percentage were the same as pinning?
-```{r}
-taxon_comp %>%
-  mutate_if(is.factor, as.character) %>%
-  filter(identificationSource == "expert", expertTaxonID == pinningTaxonID) %>%
-  dim() %>%
-  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "expert"))[1]
-```
-
-Expert the same as sorting?
-```{r}
-taxon_comp %>%
-  mutate_if(is.factor, as.character) %>%
-  filter(identificationSource == "expert", expertTaxonID == sortingTaxonID) %>%
-  dim() %>%
-  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "expert"))[1]
-```
-
-Of those where pinning was the final taxon, how many were correctly ID'd by sorting? 
-```{r}
-taxon_comp %>%
-  mutate_if(is.factor, as.character) %>%
-  filter(identificationSource == "pin", sortingTaxonID == pinningTaxonID) %>%
-  dim() %>%
-  magrittr::extract2(1)/dim(taxon_comp %>% filter(identificationSource == "pin"))[1]
-```
-
-Parataxonomists very rarely disagreed with the sorting ID without sending samples on to experts. When they did send samples on to experts they were right 70% of the time.
-
-#Temporal Coverage
-
-How many traps sampled each year? 
-```{r}
-data_expert %>%
-  select(plotID, trapID, year) %>%
-  distinct() %>%
-  group_by(year) %>%
-  count()
-```
-
-How many years was each trap sampled?
-```{r}
-data_expert %>%
-  select(plotID, trapID, year) %>%
-  distinct() %>%
-  group_by(plotID, trapID) %>%
-  count()
-```
-
-What was temporal trap coverage like? 
-```{r}
-data_expert %>%
-  select(plotID, trapID, year) %>%
-  distinct() %>%
-  group_by(plotID, trapID) %>%
-  count(name = "years_sampled") %>%
-  group_by(years_sampled) %>%
-  count(name = "n_traps")
-```
-
-For plots generally?
-```{r}
-data_expert %>%
-  select(plotID, year) %>%
-  distinct() %>%
-  group_by(plotID) %>%
-  count(name = "years_sampled") %>%
-  group_by(years_sampled) %>%
-  count(name = "n_plots")# %>%
-  #mutate(cumulative = )
-```
-
-How many plots were sampled during each bout?
-```{r}
-data_expert %>%
-  select(plotID, trapID, collectDate) %>%
-  distinct() %>%
-  group_by(collectDate) %>% 
-  count()
-```
-
-How many plots had all four traps each year?
-```{r}
-data_expert %>%
-  select(plotID, trapID, year) %>%
-  distinct() %>%
-  group_by(year, plotID) %>%
-  count(name = "n_traps") %>%
-  group_by(year, n_traps) %>%
-  count(name = "n_plots") %>% View()
-```
-
-Histogram of traps per number of samples by year
-```{r}
-data_expert %>%
-  select(plotID, trapID, year, month, day) %>%
-  distinct() %>%
-  group_by(plotID, trapID, year) %>%
-  count() %>%
-  ggplot(aes(x = n)) +
-  geom_histogram() +
-  facet_grid(. ~ year) +
-  xlab("Number of Samples") +
-  ylab("Number of Traps")
-```
-
-Histogram of plots per number of samples by year
-```{r}
-data_expert %>%
-  select(plotID, year, month, day) %>%
-  distinct() %>%
-  group_by(plotID,  year) %>%
-  count() %>%
-  ggplot(aes(x = n)) +
-  geom_histogram() +
-  facet_grid(. ~ year) +
-  xlab("Number of Samples") +
-  ylab("Number of Plots")
-```
-
-

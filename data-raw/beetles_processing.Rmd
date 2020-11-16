@@ -156,12 +156,14 @@ usethis::use_data(beetles_counts)
 
 Codyn Package formatting
 ```{r}
-beetles_counts <- beetles_counts %>%
-  #remove traps with no samples
-  filter(!is.na(taxonID))
+beetles <- beetles_counts %>%
+  mutate(year = lubridate::year(collectDate)) %>%
+  #remove traps with no samples, remove 2020
+  filter(!is.na(taxonID), year != 2020) %>%
+  select(-year)
 
 # Calculate the total trapping days for a bout
-bout_trap_days <- beetles_counts %>%
+bout_trap_days <- beetles %>%
   select(siteID, plotID, trapID, boutID, trappingDays) %>%
   distinct() %>%
   group_by(siteID, boutID) %>%

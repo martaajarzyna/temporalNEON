@@ -33,14 +33,17 @@ library(forcats)
 
 ### Switches
 
-Decide 
-1.  Get new download of the data
-1.  Write data to csv in `data-raw` 
-
+Decide on what you want this vignette to do
+1.  Get new download of the sampling data
+1.  Get new download of the taxonomy data
+1.  Write downloaded data as an RDA in `data` folder
+1.  Write data to csv files in `data-raw` folder
 ```{r switches}
 
-wrtdata <- TRUE
-dldata <- FALSE
+dldata <-     TRUE # 1
+dltaxdata <-  TRUE # 2
+wrtRDAdata <- TRUE # 3
+wrtcsvdata <- TRUE # 4
 
 ```
 
@@ -50,21 +53,10 @@ First we download and derive the data and then later tidy and explore the data.
 
 ### Macroinverts Data Product ID
 ```{r DPID}
+
 my_dpid <- 'DP1.20120.001'
+
 ```
-
-### Choose sites
-All sites had to have > 2 years of sampling data as of 2019.
-
-```{r site choice}
-
-my_site_list <- c('ARIK','BARC','BLWA','CARI','COMO','CRAM','CUPE','GUIL','HOPB',
-                  'KING','LECO','LEWI','MAYF','OKSR','POSE','PRIN','PRLA','PRPO',
-                  'REDB','SUGG','TOMB','TOOK','WALK')
-```
-
-#### Note
-This is how the reproducibility gets wonky. "used data from, `r length(my_site_list)` site."
 
 ### Download Data
 The below code used to download the raw macroinverts files is not run during the package build. Don't set `eval = TRUE` for a quick render! 
@@ -73,15 +65,16 @@ The manuscript data are stored in \`data/macroinverts_raw.rda` and as a `csv` in
 
 Rerun this code to update the data.
 
-```{r down-load, eval=FALSE}
-#download NEON data using API
+```{r down-load, eval=TRUE}
 
-if(dldata){ 
+#download NEON data using API
+if(dldata){ # UNCOMMENT THIS IF YOU WANT TO DOWNLOAD!
 inv_allTabs <- loadByProduct(dpID = my_dpid, 
-                             site = my_site_list,
+                            # site = my_site_list,
                              package = "expanded", 
-                             nCores = 4, # likely not needed
+                             nCores = 4, 
                              check.size = FALSE)
+
 }
 ```
 
@@ -128,50 +121,63 @@ taxon_rank_list_ordered <- c('kingdom',
 #### Note
 This code is nor really used but could be useful. It gets a taxon table from the API and do save it in the main list.
 
-```{r taxonomy download, eval=FALSE}
- full_taxon_table <- neonUtilities::getTaxonTable('MACROINVERTEBRATE')
+```{r taxonomy download, eval=TRUE}
+
+ if(dltaxdata){
+   full_taxon_table <- neonUtilities::getTaxonTable('MACROINVERTEBRATE')
+   }
+
 ```
-### Load Data
-If you rerun the script to scrape the NEON data, then be sure to save that new version of the data! Uncomment the code below
 
-#### Save New Data!
-```{r save data, eval=FALSE}
-#---
-# Uncomment to save a new version of the data
+#### Save New Data
+```{r save data, eval=TRUE}
 
+if(wrtRDAdata){
 inv_allTabs <- do.call(c, 
                        list(inv_allTabs, # NEON download
                             list(full_taxon_table = full_taxon_table), # NEON dl
                             list(date_of_download = Sys.time()))) # unique id
 macroinverts_raw <- inv_allTabs
 use_data(macroinverts_raw, overwrite = TRUE)
-
-#---
+}
 
 ```
 
-#### Load data
+### Load Data
 If you did not download a new version of the data, then here, load the data. Note the the raw csv tables are in `data-raw`
+
 ```{r load data}
-#load_all() should be in the setup header
-inv_allTabs <- macroinverts_raw
+
+if(!dldata){
+  load_all()
+  inv_allTabs <- macroinverts_raw
+}
+
 data.frame(tables = labels(inv_allTabs))
 ```
 
 ## Tidy Data
 The raw data are stored in a list.
 
+### Check Data
 ```{r check loaded list}
-#names(inv_allTabs )
-#names(inv_allTabs$inv_taxonomyProcessed)
+
 # Check to see if all match
-ifelse(length(setdiff(inv_allTabs$inv_taxonomyProcessed$sampleID, inv_allTabs$inv_fieldData$sampleID))>0,"STOP There is an error","All Good!")
+ifelse(
+  length(
+    setdiff(
+      inv_allTabs$inv_taxonomyProcessed$sampleID,
+      inv_allTabs$inv_fieldData$sampleID)
+    )>0,
+  "STOP There is an error",
+  "All Good!")
+
 ```
 
 ### Join Data
 Join the cleaned taxonomy (processed taxonomy) with the field data (sampling data). 
 
-Make a data set with a density variable `den`. This `den` variable is what is being tested for variance and stability. 
+Make a data set with a density variable `den`. This `den` variable is what is being tested for variance and stability in the NEON temporal analyses. 
 
 ```{r join data, eval=TRUE}
 #merge/join tables: processing macroinverts data to get to density/abundance 
@@ -185,7 +191,8 @@ inv_dat <- left_join(inv_allTabs$inv_taxonomyProcessed,
   dplyr::filter(sampleCondition == "condition OK") # toss samples low quality
 ```
 
-### Tidy colnames.
+### Tidy Column Names
+
 ```{r tidy inv_dat, eval=TRUE}
 # remove duplicate col names and .x suffix
 inv_dat <- inv_dat[,!grepl('\\.y',names(inv_dat))]
@@ -194,6 +201,7 @@ head(inv_dat)
 ```
 ### Choose Taxonomic Scale
 Toss all individuals not identified to the genus or lower taxonomic resolution (e.g., all individuals id-ed as Chironomidae are tossed).
+
 ```{r taxonomic filter}
 # get genus and finer resolution using ordered taxon_rank_list
 inv_dat$taxonRank_ordered <- factor(
@@ -206,34 +214,8 @@ inv_dat_fine <- inv_dat %>%
   filter(taxonRank_ordered <= 'genus') %>% # <= due to ordered factor
   filter(!is.na(genus), genus != '') # there are missing genera so toss them
 
-# this table has all variables and it's not in a spread format yet
+# this table has all variables and it's not in a wide format
 head(inv_dat_fine)
-
-
-```
-
-### Choose Spatial Scale
-Analyses are run at a specific unit of spatial scale and that scale is the site (`siteID`).
-
-```{r spatial scale, eval=TRUE}
-
-# grouping variables for aggregating density/abundance. Come back here if other vars are need in the final table.
-#for now, it's easier to keep simple like this in order to get one entry per site per row (species per sites summed)
-my_grouping_vars <- c('siteID','genus','collectDate') #see next code chunk
-```
-
-#### Get table of GPS points
-```{r GPS locations}
-
-# getting table of location into a data.frame (lat, long, elevation)
-table_location <- inv_allTabs$inv_fieldData %>%
-  select(namedLocation, decimalLatitude, decimalLongitude, elevation) %>%
-  distinct() %>%
-  rename(
-    location_id = namedLocation,
-    latitude = decimalLatitude,
-    longitude = decimalLongitude
-    ) 
 
 ```
 
@@ -244,6 +226,8 @@ Analyses are run at a specific unit of rime and that scale is the year and month
 ```{r temporal scale}
 # aggregate densities for each genus group, pull out year and month from collectDate, then
 #excluding collectDate
+my_grouping_vars <- c('siteID','genus','collectDate')
+
 inv_dat_aggregate_tidy <- inv_dat_fine %>%
   select(one_of(my_grouping_vars), den) %>% # spatial scale is here
   mutate(
@@ -258,6 +242,46 @@ inv_dat_aggregate_tidy <- inv_dat_fine %>%
 head(inv_dat_aggregate_tidy)
 
 ```
+
+### Choose Spatial Scale
+Analyses are run at a specific unit of spatial scale and that scale is the site (`siteID`).
+All sites had to have at least 3 years of sampling data.
+
+```{r site choice}
+
+yrz <- table(inv_dat_aggregate_tidy$siteID, inv_dat_aggregate_tidy$year)>0
+yrz
+dim(yrz)
+my_site_list <- names(rowSums(yrz))[rowSums(yrz)>2]
+
+my_site_list
+length(my_site_list)
+inv_dat_fine <- inv_dat_fine %>% filter(inv_dat_fine$siteID %in% my_site_list)
+inv_dat_aggregate_tidy <- inv_dat_aggregate_tidy %>% filter(siteID %in% my_site_list)
+
+# this was from the first round of analyses before including the 2020 data
+# my_site_list <- c('ARIK','BARC','BLWA','CARI','COMO','CRAM','CUPE','GUIL','HOPB',
+#                   'KING','LECO','LEWI','MAYF','OKSR','POSE','PRIN','PRLA','PRPO',
+#                   'REDB','SUGG','TOMB','TOOK','WALK')
+```
+
+#### Get table of GPS points
+These GPS points are used when looking at the effect of latitude on variability.
+
+```{r GPS locations}
+
+# getting table of location into a data.frame (lat, long, elevation)
+table_location <- inv_allTabs$inv_fieldData %>%
+  select(namedLocation, decimalLatitude, decimalLongitude, elevation) %>%
+  distinct() %>%
+  rename(
+    location_id = namedLocation,
+    latitude = decimalLatitude,
+    longitude = decimalLongitude
+    ) 
+
+```
+
 ## Wrangle Data
 Make the data in formats required for CODYN and BAT temopral analyses
 
@@ -265,6 +289,7 @@ Make the data in formats required for CODYN and BAT temopral analyses
 ```{r codyn, eval=TRUE}
 
 ###put in the formats required for codyn
+
 
 inv_dat_aggregate_codyn <- inv_dat_fine %>%
   select(one_of(my_grouping_vars), den) %>%
@@ -313,10 +338,11 @@ Writes the tidy data output
 drpath <- 'data-raw/submitted/macroinverts'
 
 ## Tidy (year and month)
-if(wrtdata){
+if(wrtcsvdata){
 write.csv(inv_dat_aggregate_tidy, 
           file = file.path(here(), drpath, 'macroinverts_table_abundance_tidy.csv'),
           row.names = F)
+  print("Written!")
 }
 ```
 
@@ -325,10 +351,11 @@ Writes the CODYN data output
 
 ```{r write CODYN data, eval=TRUE}
 ## Codyn (year and month)
-if(wrtdata){
+if(wrtcsvdata){
 write.csv(inv_dat_aggregate_codyn, 
           file = file.path(here(), drpath, 'macroinverts_table_abundance_codyn.csv'),
           row.names = F)
+  print("Written!")
 }
 ```
 
@@ -338,11 +365,13 @@ Writes the BAT Year data output
 ```{r write BAT year data, eval=TRUE}
 
 ## BAT (year)
-if(wrtdata){
+if(wrtcsvdata){
 
 write.csv(agregate_year_BAT,
           file = file.path(here(),drpath, 'macroinverts_table_abundance_year_BAT.csv'), 
           row.names = F)
+    print("Written!")
+
 }
 ```
 
@@ -350,19 +379,23 @@ write.csv(agregate_year_BAT,
 ```{r write BAT month, eval=TRUE}
 
 ## BAT month
-if(wrtdata){
+if(wrtcsvdata){
   write.csv(inv_dat_wide, file = 
             file.path(here(),drpath, 'macroinverts_table_abundance_bout_BAT.csv'), 
             row.names = F)
+    print("Written!")
+
 }
 ```
 
 ### GPS Locations Write
 ```{r write GPS locations, eval = TRUE}
 
-if(wrtdata){
+if(wrtcsvdata){
   write.csv(table_location, file = 
             file.path(here(),drpath, 'all_inverts_table_location.csv'), row.names = F)
+    print("Written!")
+
 }
 
 ```

@@ -40,10 +40,12 @@ map_neon_data_to_ecocomDP.SMALL.MAMMAL <- function(
     tibble::as_tibble()
   table(dat.mam$plotType) # all distributed
   
-  # remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19)
+  # remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19), Puerto Rico (D04), and Hawaii (D20)
   dat.mam <- dplyr::filter(dat.mam, year != 2020)
   dat.mam <- dplyr::filter(dat.mam, domainID != "D18")
   dat.mam <- dplyr::filter(dat.mam, domainID != "D19")
+  dat.mam <- dplyr::filter(dat.mam, domainID != "D04") 
+  dat.mam <- dplyr::filter(dat.mam, domainID != "D20")
   
   dat1 <- dat.mam %>%
     group_by(siteID, year, month) %>%
@@ -260,11 +262,13 @@ map_neon_data_to_ecocomDP.BEETLE <- function(
   
   #usethis::use_data(beetles_counts)
   
-  # remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19)
+  # remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19), Puerto Rico (D04), and Hawaii (D20)
   beetles_counts <- beetles_counts %>%
     dplyr::filter(year != 2020) %>%
     dplyr::filter(domainID != "D18") %>%
-    dplyr::filter(domainID != "D19")
+    dplyr::filter(domainID != "D19") %>%
+    dplyr::filter(domainID != "D04") %>%
+    dplyr::filter(domainID != "D20")
   
   ### Obtain sites that met our criteria (i.e., sampled for at least 4 years with 3 replicates) ###
   included_sites <- beetles_counts %>% 
@@ -450,11 +454,13 @@ map_neon_data_to_ecocomDP.FISH <- function(
     dplyr::mutate(cpue = number_of_fish/mean_efishtime * 3600)
   
   
-  ### Remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19)
+  ### Remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19), Puerto Rico (D04), and Hawaii (D20)
   data_fish <- data_fish %>%
     dplyr::filter(year != 2020) %>%
     dplyr::filter(domainID != "D18") %>%
-    dplyr::filter(domainID != "D19")
+    dplyr::filter(domainID != "D19") %>%
+    dplyr::filter(domainID != "D04") %>%
+    dplyr::filter(domainID != "D20")
   
   # concatenate year with month to make a separate column for bouts
   data_fish <- data_fish %>% dplyr::mutate(bout = paste(year, month, sep = "_"))
@@ -620,12 +626,14 @@ map_neon_data_to_ecocomDP.MACROINVERTEBRATE <- function(
       filter(!is.na(genus), genus != '') # there are missing genera so toss them
     
     
-    # remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19)
+    # remove 2020 because of incomplete sampling (covid-19) and Alaska (domains 18 & 19), Puerto Rico (D04), and Hawaii (D20)
     inv_dat_fine <- inv_dat_fine %>%
       mutate(year = substr(collectDate, 1, 4))
     inv_dat_fine <- dplyr::filter(inv_dat_fine, year != 2020)
     inv_dat_fine <- dplyr::filter(inv_dat_fine, domainID != "D18")
     inv_dat_fine <- dplyr::filter(inv_dat_fine, domainID != "D19")
+    inv_dat_fine <- dplyr::filter(inv_dat_fine, domainID != "D04")
+    inv_dat_fine <- dplyr::filter(inv_dat_fine, domainID != "D20")
     inv_dat_fine <- inv_dat_fine %>%
       mutate(month = substr(collectDate, 6,7))
     # drop the lake fish data and keep stream data only

@@ -726,7 +726,7 @@ null.year <- list()
 
 ### Intra-annual (i.e., across bouts) change in community functional composition
 ### Loop over randomizations
-for (k in 101:1000){
+for (k in 1:1000){
   cat(k)
   data.fish.bout <- rand.bout[[k]]
   sites.id <- unique(data.fish.bout$siteID)

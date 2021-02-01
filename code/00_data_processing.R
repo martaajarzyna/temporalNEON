@@ -110,7 +110,7 @@ map_neon_data_to_ecocomDP.SMALL.MAMMAL <- function(
     group_by(siteID) %>%
     summarize(lat = mean(decimalLatitude), lon = mean(decimalLongitude, na.rm=TRUE)) 
   data_small_mammal <- left_join(data_small_mammal, mean.coord, by="siteID") 
-  
+  data_small_mammal <- data_small_mammal %>% distinct()
   return(data_small_mammal)
 }
 
@@ -301,7 +301,7 @@ map_neon_data_to_ecocomDP.BEETLE <- function(
     group_by(siteID) %>%
     summarize(lat = mean(decimalLatitude), lon = mean(decimalLongitude, na.rm=TRUE)) 
   data_beetle <- left_join(data_beetle, mean.coord, by="siteID") 
-  
+  data_beetle <- data_beetle %>% distinct()
   return(data_beetle)
 }
 
@@ -526,7 +526,7 @@ map_neon_data_to_ecocomDP.FISH <- function(
     group_by(siteID) %>%
     summarize(lat = mean(decimalLatitude, na.rm=TRUE), lon = mean(decimalLongitude, na.rm=TRUE)) 
   data_fish <- left_join(data_fish, mean.coord, by="siteID") 
-  
+  data_fish <- data_fish %>% distinct()
   return(data_fish)
 }
 
@@ -707,7 +707,7 @@ map_neon_data_to_ecocomDP.MACROINVERTEBRATE <- function(
     data_macroinvertebrate <- left_join(inv_dat_fine, mean.coord, by="siteID") 
     data_macroinvertebrate <- data_macroinvertebrate %>%
       mutate(scientificName = genus) #to get the same nomenclature as in other groups
-    
+    data_macroinvertebrate <- data_macroinvertebrate %>% distinct()
     return(data_macroinvertebrate)
 }
 

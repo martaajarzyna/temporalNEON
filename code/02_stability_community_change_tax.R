@@ -4,180 +4,139 @@ require(here)
 require(tidyverse)
 require(BAT)
 require(codyn)
+require(tidyverse)
 select <- dplyr::select
 
 
-################### ECOSYSTEM STABILITY & (TAXONOMIC) COMMUNITY CHANGE USING FUNCTIONS FROM PACKAGES BAT AND CODYN
+################### COMMUNITY STABILITY & (TAXONOMIC) COMMUNITY CHANGE USING FUNCTIONS FROM PACKAGES BAT AND CODYN
 
 ################### small mammals
 data.mam.bout <- readRDS(file="data/mammal_abund-bout.rds")
-data.mam.year <- readRDS(file="data/mammal_abund-year.rds")
 sites.id <- unique(data.mam.bout$siteID)
 
-###### Ecosystem stability
-### Intra-annual (i.e., across bouts, within a year) stability in community abundance
+###### Community stability
+### Pair-wise community stability at bout-resolution
 for (i in 1:length(sites.id)){
   mi <- data.mam.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq((p+1),(yi+1),1)
+    yi_ls[[p]] <- ps
+  }
+  yi_vec <- seq(2,(yi+1),1)
+  yi_ls2 <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls2[[(yi+1)-p]] <- ps
+  }
+  yi_vec2 <- seq(1,yi,1)
   
-  out.intra.stab <- matrix(NA, length(yi), 7)
-  out.intra.stab <- as.data.frame(out.intra.stab)
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
+
+  for (k in 1:(nrow(mi)-1)){
+    mik <- mi[k:nrow(mi),]
+    yik <- nrow(mik)-1
+    yik_vec <- seq(2,(yik+1),1)
+    out.intra.stab <- matrix(NA, yik, 7)
+    out.intra.stab <- as.data.frame(out.intra.stab)
+  for (j in 1:length(yik_vec)){
+    mikj <- mik[1:yik_vec[j],]
     
-    cv <- sd(apply(mij[,8:ncol(mij)],1,sum))/mean(apply(mij[,8:ncol(mij)],1,sum))
+    cv <- sd(apply(mikj[,8:ncol(mikj)],1,sum))/mean(apply(mikj[,8:ncol(mikj)],1,sum))
     stab <- 1/cv
     out.intra.stab[j,1] <- c(domain)
     out.intra.stab[j,2] <- sites.id[i]
     out.intra.stab[j,3] <- lat
     out.intra.stab[j,4] <- lon
-    out.intra.stab[j,5] <- yi[j]
+    out.intra.stab[j,5] <- yi_ls2[[k]][j]
     out.intra.stab[j,6] <- cv
     out.intra.stab[j,7] <- stab
-  } 
+  }
+    if (k == 1) {
+      out.intra.stab.all <- out.intra.stab
+    } else {
+      out.intra.stab.all <- out.intra.stab.all %>%
+        bind_rows(out.intra.stab)
+    }} 
   
   if (i == 1) {
-    out.intra.stab.all <- out.intra.stab
+    out.intra.stab.consecutive <- out.intra.stab.all
   } else {
-    out.intra.stab.all <- out.intra.stab.all %>%
-      bind_rows(out.intra.stab)
-  } 
-}
+    out.intra.stab.consecutive <- out.intra.stab.consecutive %>%
+      bind_rows(out.intra.stab.all)
+  }}
 
-colnames(out.intra.stab.all) <- c("domainID","siteID","lat", "lon", "year","bout_cv","bout_stability")
-saveRDS(out.intra.stab.all, file="data/mammal_outStability-bout.rds")
-
-
-### Inter-annual (i.e., across years) stability in community abundance
-out.inter.stab <- matrix(NA, length(sites.id), 6)
-out.inter.stab <- as.data.frame(out.inter.stab)
-
-for (i in 1:length(sites.id)){
-  mi <- data.mam.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  
-  cv <- sd(apply(mi[,6:ncol(mi)],1,sum))/mean(apply(mi[,6:ncol(mi)],1,sum))
-  stab <- 1/cv
-  out.inter.stab[i,1] <- c(domain)
-  out.inter.stab[i,2] <- sites.id[i]
-  out.inter.stab[i,3] <- lat
-  out.inter.stab[i,4] <- lon
-  out.inter.stab[i,5] <- cv
-  out.inter.stab[i,6] <- stab
-}
-
-colnames(out.inter.stab) <- c("domainID","siteID","lat", "lon", "year_cv","year_stability")
-saveRDS(out.inter.stab, file="data/mammal_outStability-year.rds")
-
+colnames(out.intra.stab.consecutive) <- c("domainID","siteID","lat", "lon", "bout_lag","bout_cv","bout_stability")
+saveRDS(out.intra.stab.consecutive, file="Data/mammal_outStability-bout-consecutive-all.rds")
+#out.intra.stab.consecutive <- readRDS(file="Data/mammal_outStability-bout-consecutive-all.rds")
 
 
 ###### Community change: Package BAT
-### Function to retrieve the diagonal of a distance matrix
-### courtesy of https://stackoverflow.com/questions/39231961/extract-diagonals-from-a-distance-matrix-in-r
-### retain only diagonal because we only want boout-to-boout and year-to-year comparison not all pair-wise combinations, to avoid biases associated with length of time series
-subdiag <- function (dist_obj, d) {
-  if (!inherits(dist_obj, "dist")) stop("please provide a 'dist' object!")
-  n <- attr(dist_obj, "Size")
-  if (d < 1 || d > (n - 1)) stop(sprintf("'d' needs be between 1 and %d", n - 1L))
-  j_1 <- c(0, seq.int(from = n - 1, by = -1, length = n - d - 1))
-  subdiag_ind <- d + cumsum(j_1)
-  dist_obj[subdiag_ind]
-}
-
-
-### Intra-annual (i.e., across bouts) change in community composition
+##### pair-wise comparisons
 for (i in 1:length(sites.id)){
   mi <- data.mam.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-      out.intra.bat <- matrix(NA, (nrow(mij)-1), 10)
-      out.intra.bat <- as.data.frame(out.intra.bat)
-      out.intra.bat[,1] <- c(domain)
-      out.intra.bat[,2] <- sites.id[i]
-      out.intra.bat[,3] <- lat
-      out.intra.bat[,4] <- lon
-      out.intra.bat[,5] <- yi[j]
-      betadiv <- beta(mij[,8:ncol(mij)], abund = TRUE, raref = 0)
-      bouts <- mij[,7]
-      out.intra.bat[,6] <- bouts[1:(nrow(bouts)-1),] #bout 1
-      out.intra.bat[,7] <- bouts[2:nrow(bouts),] #bout 2
-      out.intra.bat[,8] <- subdiag(betadiv$Btotal, 1)
-      out.intra.bat[,9] <- subdiag(betadiv$Brepl, 1)
-      out.intra.bat[,10] <- subdiag(betadiv$Brich, 1)
-    
-    if (j == 1) {
-      out.intra.bat.ally <- out.intra.bat
-    } else {
-      out.intra.bat.ally <- out.intra.bat.ally %>%
-        bind_rows(out.intra.bat)
-    } 
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls[[(yi+1)-p]] <- ps
   }
+  lags <- melt(yi_ls)
+  
+  betadiv <- beta(mi[,8:ncol(mi)], abund = TRUE, raref = 0)
+  out.bout.bat <- matrix(NA, nrow(lags), 8)
+  out.bout.bat <- as.data.frame(out.bout.bat)
+  jacc <- as.matrix(betadiv$Btotal)
+  jacc[upper.tri(jacc)] <- NA
+  diag(jacc) <- NA
+  jacc <- melt(jacc)
+  jacc <- jacc[complete.cases(jacc),]
+  
+  jaccrepl <- as.matrix(betadiv$Brepl)
+  jaccrepl[upper.tri(jaccrepl)] <- NA
+  diag(jaccrepl) <- NA
+  jaccrepl <- melt(jaccrepl)
+  jaccrepl <- jaccrepl[complete.cases(jaccrepl),]
+  
+  jaccrich <- as.matrix(betadiv$Brich)
+  jaccrich[upper.tri(jaccrich)] <- NA
+  diag(jaccrich) <- NA
+  jaccrich <- melt(jaccrich)
+  jaccrich <- jaccrich[complete.cases(jaccrich),]
+  
+  out.bout.bat[,1] <- c(domain)
+  out.bout.bat[,2] <- sites.id[i]
+  out.bout.bat[,3] <- lat
+  out.bout.bat[,4] <- lon
+  out.bout.bat[,5] <- lags[,1]
+  out.bout.bat[,6] <- jacc[,3]
+  out.bout.bat[,7] <- jaccrepl[,3]
+  out.bout.bat[,8] <- jaccrich[,3]
   
   if (i == 1) {
-    out.intra.bat.all <- out.intra.bat.ally
+    out.bout.bat.all <- out.bout.bat
   } else {
-    out.intra.bat.all <- out.intra.bat.all %>%
-      bind_rows(out.intra.bat.ally)
-  } 
-}
-
-
-colnames(out.intra.bat.all) <- c("domainID","siteID","lat","lon","year","bout_from","bout_to","bout_jacc","bout_jaccrepl","bout_jaccrich")
-saveRDS(out.intra.bat.all, file="data/mammal_outBAT-bout.rds")
-
-
-### Inter-annual (i.e., across year) change in community composition
-for (i in 1:length(sites.id)){
-  mi <- data.mam.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  betadiv <- beta(mi[,6:ncol(mi)], abund = TRUE, raref = 0)
-  out.inter.bat <- matrix(NA, (nrow(mi)-1), 9)
-  out.inter.bat <- as.data.frame(out.inter.bat)
-  out.inter.bat[,1] <- c(domain)
-  out.inter.bat[,2] <- sites.id[i]
-  out.inter.bat[,3] <- lat
-  out.inter.bat[,4] <- lon
-  out.inter.bat[,5] <- yi[1:(length(yi)-1)]
-  out.inter.bat[,6] <- yi[2:length(yi)]
-  out.inter.bat[,7] <- subdiag(betadiv$Btotal, 1)
-  out.inter.bat[,8] <- subdiag(betadiv$Brepl, 1)
-  out.inter.bat[,9] <- subdiag(betadiv$Brich, 1)
-  
-  if (i == 1) {
-    out.inter.bat.all <- out.inter.bat
-  } else {
-    out.inter.bat.all <- out.inter.bat.all %>%
-      bind_rows(out.inter.bat)
+    out.bout.bat.all <- out.bout.bat.all %>%
+      bind_rows(out.bout.bat)
   }
 }
 
-colnames(out.inter.bat.all) <- c("domainID","siteID","lat","lon","year_from","year_to","year_jacc","year_jaccrepl","year_jaccrich")
-saveRDS(out.inter.bat.all, file="data/mammal_outBAT-year.rds")
+colnames(out.bout.bat.all) <- c("domainID","siteID","lat","lon","bout_lag","bout_consec_jacc","bout_consec_jaccrepl","bout_consec_jaccrich")
+out.bout.bat.all <- out.bout.bat.all %>% 
+  mutate(bout_consec_contr_jaccrepl = bout_consec_jaccrepl/bout_consec_jacc, bout_consec_contr_jaccrich = bout_consec_jaccrich/bout_consec_jacc)
+saveRDS(out.bout.bat.all, file="data/mammal_outBAT-bout-consecutive-all.rds")
 
 
-
-###### Community change: Package codyn
+###### Community change: Package BAT
+##### pair-wise comparisons
 mean.coord <- data.mam.bout %>%
   group_by(domainID, siteID) %>%
   summarize(lat = mean(lat), lon = mean(lon, na.rm=TRUE)) 
@@ -185,415 +144,386 @@ mean.coord <- data.mam.bout %>%
 data.mam.bout.piv <- data.mam.bout %>%
   pivot_longer(-c(domainID, siteID, lat, lon, year, month, bout), names_to = "scientificName", values_to = "abundance") 
 
-data.mam.year.piv <- data.mam.year %>%
-  pivot_longer(-c(domainID, siteID, lat, lon, year), names_to = "scientificName", values_to = "abundance") 
+siteids <- unique(data.mam.bout.piv$siteID)
 
-### Intra-annual (i.e., across bout) change in community composition
-out.intra.codyn <- RAC_change(data.mam.bout.piv, 
-                               time.var = "bout", species.var = "scientificName",
-                               abundance.var = "abundance", replicate.var = "siteID") %>%
-  #remove bout comparisons that cross years
-  filter(substr(bout, 1, 4) == substr(bout2, 1, 4)) %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(bout_from = bout, bout_to = bout2, year = as.numeric(substr(bout_from, start = 1, stop = 4))) %>%
-  select(domainID, siteID, lat, lon, year, bout_from, bout_to, richness_change, evenness_change, rank_change, gains, losses)
+for (i in 1:length(siteids)){
+  sel.site <- data.mam.bout.piv %>% 
+    filter(siteID == siteids[i]) %>% 
+    arrange(year,month)
+  
+  sel.time <- unique(sel.site$bout)
+  sel.time <- as.data.frame(cbind(sel.time, seq(1,length(sel.time),1)))
+  colnames(sel.time) <- c("bout","bout_no")
+  sel.time$bout_no <- as.numeric(as.character(sel.time$bout_no))
+  sel.site <- sel.site %>% left_join(sel.time, by="bout")
+  yi <- nrow(sel.time)
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(p,yi,1)
+    yi_ls[[p]] <- ps
+  }
+  
+  for (j in 1:(yi-1)){
+    sel.site.j <- sel.site %>% filter(bout_no %in% yi_ls[[j]])
+      ref.time <- as.numeric(yi_ls[[j]][1])
+      out.intra.codyn <- RAC_change(sel.site.j, 
+                                time.var = "bout_no", reference.time = ref.time, species.var = "scientificName",
+                                abundance.var = "abundance", replicate.var = "siteID") %>%
+    #remove bout comparisons that cross years
+    mutate(bout_lag = bout_no2-bout_no) %>%
+    left_join(mean.coord, by="siteID") %>%
+    select(domainID, siteID, lat, lon, bout_no, bout_no2, bout_lag, richness_change, evenness_change, rank_change, gains, losses)
+    
+      if (j == 1) {
+      out.intra.codyn.all <- out.intra.codyn
+    } else {
+      out.intra.codyn.all <- out.intra.codyn.all %>%
+        bind_rows(out.intra.codyn)
+    }}
+    
+    if (i == 1) {
+      out.intra.codyn.cons.all <- out.intra.codyn.all
+      } else {
+        out.intra.codyn.cons.all <- out.intra.codyn.cons.all %>%
+          bind_rows(out.intra.codyn.all)
+  }}
 
-saveRDS(out.intra.codyn, file="data/mammal_outCodyn-bout.rds")
+saveRDS(out.intra.codyn.cons.all, file="Data/mammal_outCodyn-bout-consecutive-all.rds")
 
-### Inter-annual (i.e., across year) change in community composition
-out.inter.codyn <- RAC_change(data.mam.year.piv, 
-                               time.var = "year", species.var = "scientificName",
-                               abundance.var = "abundance", replicate.var = "siteID") %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(year_from = year, year_to = year2) %>%
-  select(domainID, siteID, lat, lon, year_from, year_to, richness_change, evenness_change, rank_change, gains, losses)
+########read in all data
+stab.bout.cons.all <- readRDS(file="data/mammal_outStability-bout-consecutive-all.rds")
+stab.bout.cons.all$bout_lag <- as.numeric(stab.bout.cons.all$bout_lag)
+bat.bout.cons.all <- readRDS(file="data/mammal_outBAT-bout-consecutive-all.rds")
+bat.bout.cons.all$bout_lag <- as.numeric(bat.bout.cons.all$bout_lag)
+codyn.bout.cons.all <- readRDS(file="data/mammal_outCodyn-bout-consecutive-all.rds")
+codyn.bout.cons.all$bout_lag <- as.numeric(codyn.bout.cons.all$bout_lag)
 
-saveRDS(out.inter.codyn, file="data/mammal_outCodyn-year.rds")
-
-
+all.bout.cons.all <- cbind(stab.bout.cons.all, bat.bout.cons.all[,6:ncol(bat.bout.cons.all)], codyn.bout.cons.all[,8:ncol(codyn.bout.cons.all)])
+saveRDS(all.bout.cons.all, file="data/mammal_outAll-bout-consecutive-all.rds")
 
 
 ################### ground beetles
 data.beetle.bout <- readRDS(file="data/beetle_abund-bout.rds")
-data.beetle.year <- readRDS(file="data/beetle_abund-year.rds")
 sites.id <- unique(data.beetle.bout$siteID)
 
-###### Ecosystem stability
-### Intra-annual (i.e., across bouts, within a year) stability in community abundance
+###### Community stability
+### Pair-wise community stability at bout-resolution
 for (i in 1:length(sites.id)){
   mi <- data.beetle.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq((p+1),(yi+1),1)
+    yi_ls[[p]] <- ps
+  }
+  yi_vec <- seq(2,(yi+1),1)
+  yi_ls2 <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls2[[(yi+1)-p]] <- ps
+  }
+  yi_vec2 <- seq(1,yi,1)
   
-  out.intra.stab <- matrix(NA, length(yi), 7)
-  out.intra.stab <- as.data.frame(out.intra.stab)
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-    cv <- sd(apply(mij[,7:ncol(mij)],1,sum))/mean(apply(mij[,7:ncol(mij)],1,sum))
-    stab <- 1/cv
-    out.intra.stab[j,1] <- c(domain)
-    out.intra.stab[j,2] <- sites.id[i]
-    out.intra.stab[j,3] <- lat
-    out.intra.stab[j,4] <- lon
-    out.intra.stab[j,5] <- yi[j]
-    out.intra.stab[j,6] <- cv
-    out.intra.stab[j,7] <- stab
-  } 
+  
+  for (k in 1:(nrow(mi)-1)){
+    mik <- mi[k:nrow(mi),]
+    yik <- nrow(mik)-1
+    yik_vec <- seq(2,(yik+1),1)
+    out.intra.stab <- matrix(NA, yik, 7)
+    out.intra.stab <- as.data.frame(out.intra.stab)
+    for (j in 1:length(yik_vec)){
+      mikj <- mik[1:yik_vec[j],]
+      
+      cv <- sd(apply(mikj[,7:ncol(mikj)],1,sum))/mean(apply(mikj[,7:ncol(mikj)],1,sum))
+      stab <- 1/cv
+      out.intra.stab[j,1] <- c(domain)
+      out.intra.stab[j,2] <- sites.id[i]
+      out.intra.stab[j,3] <- lat
+      out.intra.stab[j,4] <- lon
+      out.intra.stab[j,5] <- yi_ls2[[k]][j]
+      out.intra.stab[j,6] <- cv
+      out.intra.stab[j,7] <- stab
+    }
+    if (k == 1) {
+      out.intra.stab.all <- out.intra.stab
+    } else {
+      out.intra.stab.all <- out.intra.stab.all %>%
+        bind_rows(out.intra.stab)
+    }} 
   
   if (i == 1) {
-    out.intra.stab.all <- out.intra.stab
+    out.intra.stab.consecutive <- out.intra.stab.all
   } else {
-    out.intra.stab.all <- out.intra.stab.all %>%
-      bind_rows(out.intra.stab)
-  } 
-}
+    out.intra.stab.consecutive <- out.intra.stab.consecutive %>%
+      bind_rows(out.intra.stab.all)
+  }}
 
-colnames(out.intra.stab.all) <- c("domainID","siteID","lat", "lon", "year","bout_cv","bout_stability")
-out.intra.stab.all <- out.intra.stab.all %>%
-  mutate(year = as.numeric(year))
-saveRDS(out.intra.stab.all, file="data/beetle_outStability-bout.rds")
-
-
-### Inter-annual (i.e., across years) stability in community abundance
-out.inter.stab <- matrix(NA, length(sites.id), 6)
-out.inter.stab <- as.data.frame(out.inter.stab)
-
-for (i in 1:length(sites.id)){
-  mi <- data.beetle.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  
-  cv <- sd(apply(mi[,6:ncol(mi)],1,sum))/mean(apply(mi[,6:ncol(mi)],1,sum))
-  stab <- 1/cv
-  out.inter.stab[i,1] <- c(domain)
-  out.inter.stab[i,2] <- sites.id[i]
-  out.inter.stab[i,3] <- lat
-  out.inter.stab[i,4] <- lon
-  out.inter.stab[i,5] <- cv
-  out.inter.stab[i,6] <- stab
-}
-
-colnames(out.inter.stab) <- c("domainID","siteID","lat", "lon", "year_cv","year_stability")
-saveRDS(out.inter.stab, file="data/beetle_outStability-year.rds")
-
+colnames(out.intra.stab.consecutive) <- c("domainID","siteID","lat", "lon", "bout_lag","bout_cv","bout_stability")
+saveRDS(out.intra.stab.consecutive, file="data/beetle_outStability-bout-consecutive-all.rds")
 
 
 ###### Community change: Package BAT
-### Function to retrieve the diagonal of a distance matrix
-### courtesy of https://stackoverflow.com/questions/39231961/extract-diagonals-from-a-distance-matrix-in-r
-### retain only diagonal because we only want boout-to-boout and year-to-year comparison not all pair-wise combinations, to avoid biases associated with length of time series
-subdiag <- function (dist_obj, d) {
-  if (!inherits(dist_obj, "dist")) stop("please provide a 'dist' object!")
-  n <- attr(dist_obj, "Size")
-  if (d < 1 || d > (n - 1)) stop(sprintf("'d' needs be between 1 and %d", n - 1L))
-  j_1 <- c(0, seq.int(from = n - 1, by = -1, length = n - d - 1))
-  subdiag_ind <- d + cumsum(j_1)
-  dist_obj[subdiag_ind]
-}
-
-
-### Intra-annual (i.e., across bouts) change in community composition
+### pair-wise comparisons
 for (i in 1:length(sites.id)){
   mi <- data.beetle.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-    out.intra.bat <- matrix(NA, (nrow(mij)-1), 10)
-    out.intra.bat <- as.data.frame(out.intra.bat)
-    out.intra.bat[,1] <- c(domain)
-    out.intra.bat[,2] <- sites.id[i]
-    out.intra.bat[,3] <- lat
-    out.intra.bat[,4] <- lon
-    out.intra.bat[,5] <- yi[j]
-    betadiv <- beta(mij[,7:ncol(mij)], abund = TRUE, raref = 0)
-    bouts <- mij[,6]
-    out.intra.bat[,6] <- bouts[1:(nrow(bouts)-1),] #bout 1
-    out.intra.bat[,7] <- bouts[2:nrow(bouts),] #bout 2
-    out.intra.bat[,8] <- subdiag(betadiv$Btotal, 1)
-    out.intra.bat[,9] <- subdiag(betadiv$Brepl, 1)
-    out.intra.bat[,10] <- subdiag(betadiv$Brich, 1)
-    
-    if (j == 1) {
-      out.intra.bat.ally <- out.intra.bat
-    } else {
-      out.intra.bat.ally <- out.intra.bat.ally %>%
-        bind_rows(out.intra.bat)
-    } 
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls[[(yi+1)-p]] <- ps
   }
+  lags <- melt(yi_ls)
+  
+  betadiv <- beta(mi[,7:ncol(mi)], abund = TRUE, raref = 0)
+  out.bout.bat <- matrix(NA, nrow(lags), 8)
+  out.bout.bat <- as.data.frame(out.bout.bat)
+  jacc <- as.matrix(betadiv$Btotal)
+  jacc[upper.tri(jacc)] <- NA
+  diag(jacc) <- NA
+  jacc <- melt(jacc)
+  jacc <- jacc[complete.cases(jacc),]
+  
+  jaccrepl <- as.matrix(betadiv$Brepl)
+  jaccrepl[upper.tri(jaccrepl)] <- NA
+  diag(jaccrepl) <- NA
+  jaccrepl <- melt(jaccrepl)
+  jaccrepl <- jaccrepl[complete.cases(jaccrepl),]
+  
+  jaccrich <- as.matrix(betadiv$Brich)
+  jaccrich[upper.tri(jaccrich)] <- NA
+  diag(jaccrich) <- NA
+  jaccrich <- melt(jaccrich)
+  jaccrich <- jaccrich[complete.cases(jaccrich),]
+  
+  out.bout.bat[,1] <- c(domain)
+  out.bout.bat[,2] <- sites.id[i]
+  out.bout.bat[,3] <- lat
+  out.bout.bat[,4] <- lon
+  out.bout.bat[,5] <- lags[,1]
+  out.bout.bat[,6] <- jacc[,3]
+  out.bout.bat[,7] <- jaccrepl[,3]
+  out.bout.bat[,8] <- jaccrich[,3]
   
   if (i == 1) {
-    out.intra.bat.all <- out.intra.bat.ally
+    out.bout.bat.all <- out.bout.bat
   } else {
-    out.intra.bat.all <- out.intra.bat.all %>%
-      bind_rows(out.intra.bat.ally)
-  } 
-}
-
-
-colnames(out.intra.bat.all) <- c("domainID","siteID","lat","lon","year","bout_from","bout_to","bout_jacc","bout_jaccrepl","bout_jaccrich")
-out.intra.bat.all <- out.intra.bat.all %>%
-  mutate(year = as.numeric(year))
-saveRDS(out.intra.bat.all, file="data/beetle_outBAT-bout.rds")
-
-
-### Inter-annual (i.e., across year) change in community composition
-for (i in 1:length(sites.id)){
-  mi <- data.beetle.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  betadiv <- beta(mi[,6:ncol(mi)], abund = TRUE, raref = 0)
-  out.inter.bat <- matrix(NA, (nrow(mi)-1), 9)
-  out.inter.bat <- as.data.frame(out.inter.bat)
-  out.inter.bat[,1] <- c(domain)
-  out.inter.bat[,2] <- sites.id[i]
-  out.inter.bat[,3] <- lat
-  out.inter.bat[,4] <- lon
-  out.inter.bat[,5] <- yi[1:(length(yi)-1)]
-  out.inter.bat[,6] <- yi[2:length(yi)]
-  out.inter.bat[,7] <- subdiag(betadiv$Btotal, 1)
-  out.inter.bat[,8] <- subdiag(betadiv$Brepl, 1)
-  out.inter.bat[,9] <- subdiag(betadiv$Brich, 1)
-  
-  if (i == 1) {
-    out.inter.bat.all <- out.inter.bat
-  } else {
-    out.inter.bat.all <- out.inter.bat.all %>%
-      bind_rows(out.inter.bat)
+    out.bout.bat.all <- out.bout.bat.all %>%
+      bind_rows(out.bout.bat)
   }
 }
 
-colnames(out.inter.bat.all) <- c("domainID","siteID","lat","lon","year_from","year_to","year_jacc","year_jaccrepl","year_jaccrich")
-saveRDS(out.inter.bat.all, file="data/beetle_outBAT-year.rds")
-
+colnames(out.bout.bat.all) <- c("domainID","siteID","lat","lon","bout_lag","bout_consec_jacc","bout_consec_jaccrepl","bout_consec_jaccrich")
+out.bout.bat.all <- out.bout.bat.all %>% 
+  mutate(bout_consec_contr_jaccrepl = bout_consec_jaccrepl/bout_consec_jacc, bout_consec_contr_jaccrich = bout_consec_jaccrich/bout_consec_jacc)
+saveRDS(out.bout.bat.all, file="data/beetle_outBAT-bout-consecutive-all.rds")
 
 
 ###### Community change: Package codyn
+### pair-wise comparisons
+data.beetle.bout <- data.beetle.bout %>%
+  mutate(year = as.numeric(substr(bout, start = 6, stop = 9)), month = as.numeric(substr(bout, start = 11, stop = 12)), day = as.numeric(substr(bout, start = 14, stop = 15)))
+
 mean.coord <- data.beetle.bout %>%
   group_by(domainID, siteID) %>%
   summarize(lat = mean(lat), lon = mean(lon, na.rm=TRUE)) 
 
 data.beetle.bout.piv <- data.beetle.bout %>%
-  pivot_longer(-c(domainID, siteID, lat, lon, year, bout), names_to = "scientificName", values_to = "abundance") 
+  pivot_longer(-c(domainID, siteID, lat, lon, year, month, day, bout), names_to = "scientificName", values_to = "abundance") 
 
-data.beetle.year.piv <- data.beetle.year %>%
-  pivot_longer(-c(domainID, siteID, lat, lon, year), names_to = "scientificName", values_to = "abundance") 
+siteids <- unique(data.beetle.bout.piv$siteID)
 
-### Intra-annual (i.e., across bout) change in community composition
-out.intra.codyn <- RAC_change(data.beetle.bout.piv, 
-                              time.var = "bout", species.var = "scientificName",
-                              abundance.var = "abundance", replicate.var = "siteID") %>%
-  #remove bout comparisons that cross years
-  filter(substr(bout, 6, 9) == substr(bout2, 6, 9)) %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(bout_from = bout, bout_to = bout2, year = as.numeric(substr(bout_from, start = 6, stop = 9))) %>%
-  select(domainID, siteID, lat, lon, year, bout_from, bout_to, richness_change, evenness_change, rank_change, gains, losses)
+for (i in 1:length(siteids)){
+  sel.site <- data.beetle.bout.piv %>% 
+    filter(siteID == siteids[i]) %>% 
+    arrange(year,month,day)
+  
+  sel.time <- unique(sel.site$bout)
+  sel.time <- as.data.frame(cbind(sel.time, seq(1,length(sel.time),1)))
+  colnames(sel.time) <- c("bout","bout_no")
+  sel.time$bout_no <- as.numeric(as.character(sel.time$bout_no))
+  sel.site <- sel.site %>% left_join(sel.time, by="bout")
+  yi <- nrow(sel.time)
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(p,yi,1)
+    yi_ls[[p]] <- ps
+  }
+  
+  for (j in 1:(yi-1)){
+    sel.site.j <- sel.site %>% filter(bout_no %in% yi_ls[[j]])
+    ref.time <- as.numeric(yi_ls[[j]][1])
+    out.intra.codyn <- RAC_change(sel.site.j, 
+                                  time.var = "bout_no", reference.time = ref.time, species.var = "scientificName",
+                                  abundance.var = "abundance", replicate.var = "siteID") %>%
+      #remove bout comparisons that cross years
+      mutate(bout_lag = bout_no2-bout_no) %>%
+      left_join(mean.coord, by="siteID") %>%
+      select(domainID, siteID, lat, lon, bout_no, bout_no2, bout_lag, richness_change, evenness_change, rank_change, gains, losses)
+    
+    if (j == 1) {
+      out.intra.codyn.all <- out.intra.codyn
+    } else {
+      out.intra.codyn.all <- out.intra.codyn.all %>%
+        bind_rows(out.intra.codyn)
+    }}
+  
+  if (i == 1) {
+    out.intra.codyn.cons.all <- out.intra.codyn.all
+  } else {
+    out.intra.codyn.cons.all <- out.intra.codyn.cons.all %>%
+      bind_rows(out.intra.codyn.all)
+  }}
 
-saveRDS(out.intra.codyn, file="data/beetle_outCodyn-bout.rds")
+saveRDS(out.intra.codyn.cons.all, file="data/beetle_outCodyn-bout-consecutive-all.rds")
 
-### Inter-annual (i.e., across year) change in community composition
-out.inter.codyn <- RAC_change(data.beetle.year.piv, 
-                              time.var = "year", species.var = "scientificName",
-                              abundance.var = "abundance", replicate.var = "siteID") %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(year_from = year, year_to = year2) %>%
-  select(domainID, siteID, lat, lon, year_from, year_to, richness_change, evenness_change, rank_change, gains, losses)
 
-saveRDS(out.inter.codyn, file="data/beetle_outCodyn-year.rds")
+########read in all data 
+stab.bout.cons.all <- readRDS(file="data/beetle_outStability-bout-consecutive-all.rds")
+stab.bout.cons.all$bout_lag <- as.numeric(stab.bout.cons.all$bout_lag)
+bat.bout.cons.all <- readRDS(file="data/beetle_outBAT-bout-consecutive-all.rds")
+bat.bout.cons.all$bout_lag <- as.numeric(bat.bout.cons.all$bout_lag)
+codyn.bout.cons.all <- readRDS(file="data/beetle_outCodyn-bout-consecutive-all.rds")
+codyn.bout.cons.all$bout_lag <- as.numeric(codyn.bout.cons.all$bout_lag)
 
+all.bout.cons.all <- cbind(stab.bout.cons.all, bat.bout.cons.all[,6:ncol(bat.bout.cons.all)], codyn.bout.cons.all[,8:ncol(codyn.bout.cons.all)])
+saveRDS(all.bout.cons.all, file="data/beetle_outAll-bout-consecutive-all.rds")
 
 
 
 ################### fish
 data.fish.bout <- readRDS(file="data/fish_abund-bout.rds")
-data.fish.year <- readRDS(file="data/fish_abund-year.rds")
 sites.id <- unique(data.fish.bout$siteID)
 
-###### Ecosystem stability
-### Intra-annual (i.e., across bouts, within a year) stability in community abundance
+###### Community stability
+### Pair-wise community stability at bout-resolution
 for (i in 1:length(sites.id)){
   mi <- data.fish.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq((p+1),(yi+1),1)
+    yi_ls[[p]] <- ps
+  }
+  yi_vec <- seq(2,(yi+1),1)
+  yi_ls2 <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls2[[(yi+1)-p]] <- ps
+  }
+  yi_vec2 <- seq(1,yi,1)
   
-  out.intra.stab <- matrix(NA, length(yi), 7)
-  out.intra.stab <- as.data.frame(out.intra.stab)
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-    cv <- sd(apply(mij[,8:ncol(mij)],1,sum))/mean(apply(mij[,8:ncol(mij)],1,sum))
-    stab <- 1/cv
-    out.intra.stab[j,1] <- c(domain)
-    out.intra.stab[j,2] <- sites.id[i]
-    out.intra.stab[j,3] <- lat
-    out.intra.stab[j,4] <- lon
-    out.intra.stab[j,5] <- yi[j]
-    out.intra.stab[j,6] <- cv
-    out.intra.stab[j,7] <- stab
-  } 
+  
+  for (k in 1:(nrow(mi)-1)){
+    mik <- mi[k:nrow(mi),]
+    yik <- nrow(mik)-1
+    yik_vec <- seq(2,(yik+1),1)
+    out.intra.stab <- matrix(NA, yik, 7)
+    out.intra.stab <- as.data.frame(out.intra.stab)
+    for (j in 1:length(yik_vec)){
+      mikj <- mik[1:yik_vec[j],]
+      
+      cv <- sd(apply(mikj[,8:ncol(mikj)],1,sum))/mean(apply(mikj[,8:ncol(mikj)],1,sum))
+      stab <- 1/cv
+      out.intra.stab[j,1] <- c(domain)
+      out.intra.stab[j,2] <- sites.id[i]
+      out.intra.stab[j,3] <- lat
+      out.intra.stab[j,4] <- lon
+      out.intra.stab[j,5] <- yi_ls2[[k]][j]
+      out.intra.stab[j,6] <- cv
+      out.intra.stab[j,7] <- stab
+    }
+    if (k == 1) {
+      out.intra.stab.all <- out.intra.stab
+    } else {
+      out.intra.stab.all <- out.intra.stab.all %>%
+        bind_rows(out.intra.stab)
+    }} 
   
   if (i == 1) {
-    out.intra.stab.all <- out.intra.stab
+    out.intra.stab.consecutive <- out.intra.stab.all
   } else {
-    out.intra.stab.all <- out.intra.stab.all %>%
-      bind_rows(out.intra.stab)
-  } 
-}
+    out.intra.stab.consecutive <- out.intra.stab.consecutive %>%
+      bind_rows(out.intra.stab.all)
+  }}
 
-colnames(out.intra.stab.all) <- c("domainID","siteID","lat", "lon", "year","bout_cv","bout_stability")
-out.intra.stab.all <- out.intra.stab.all %>%
-  mutate(year = as.numeric(year))
-saveRDS(out.intra.stab.all, file="data/fish_outStability-bout.rds")
-
-
-### Inter-annual (i.e., across years) stability in community abundance
-out.inter.stab <- matrix(NA, length(sites.id), 6)
-out.inter.stab <- as.data.frame(out.inter.stab)
-
-for (i in 1:length(sites.id)){
-  mi <- data.fish.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  
-  cv <- sd(apply(mi[,6:ncol(mi)],1,sum))/mean(apply(mi[,6:ncol(mi)],1,sum))
-  stab <- 1/cv
-  out.inter.stab[i,1] <- c(domain)
-  out.inter.stab[i,2] <- sites.id[i]
-  out.inter.stab[i,3] <- lat
-  out.inter.stab[i,4] <- lon
-  out.inter.stab[i,5] <- cv
-  out.inter.stab[i,6] <- stab
-}
-
-colnames(out.inter.stab) <- c("domainID","siteID","lat", "lon", "year_cv","year_stability")
-saveRDS(out.inter.stab, file="data/fish_outStability-year.rds")
-
+colnames(out.intra.stab.consecutive) <- c("domainID","siteID","lat", "lon", "bout_lag","bout_cv","bout_stability")
+saveRDS(out.intra.stab.consecutive, file="data/fish_outStability-bout-consecutive-all.rds")
 
 
 ###### Community change: Package BAT
-### Function to retrieve the diagonal of a distance matrix
-### courtesy of https://stackoverflow.com/questions/39231961/extract-diagonals-from-a-distance-matrix-in-r
-### retain only diagonal because we only want boout-to-boout and year-to-year comparison not all pair-wise combinations, to avoid biases associated with length of time series
-subdiag <- function (dist_obj, d) {
-  if (!inherits(dist_obj, "dist")) stop("please provide a 'dist' object!")
-  n <- attr(dist_obj, "Size")
-  if (d < 1 || d > (n - 1)) stop(sprintf("'d' needs be between 1 and %d", n - 1L))
-  j_1 <- c(0, seq.int(from = n - 1, by = -1, length = n - d - 1))
-  subdiag_ind <- d + cumsum(j_1)
-  dist_obj[subdiag_ind]
-}
-
-
-### Intra-annual (i.e., across bouts) change in community composition
+### pair-wise comparisons
 for (i in 1:length(sites.id)){
   mi <- data.fish.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-    out.intra.bat <- matrix(NA, (nrow(mij)-1), 10)
-    out.intra.bat <- as.data.frame(out.intra.bat)
-    out.intra.bat[,1] <- c(domain)
-    out.intra.bat[,2] <- sites.id[i]
-    out.intra.bat[,3] <- lat
-    out.intra.bat[,4] <- lon
-    out.intra.bat[,5] <- yi[j]
-    betadiv <- beta(mij[,8:ncol(mij)], abund = TRUE, raref = 0)
-    bouts <- mij[,7]
-    out.intra.bat[,6] <- bouts[1:(nrow(bouts)-1),] #bout 1
-    out.intra.bat[,7] <- bouts[2:nrow(bouts),] #bout 2
-    out.intra.bat[,8] <- subdiag(betadiv$Btotal, 1)
-    out.intra.bat[,9] <- subdiag(betadiv$Brepl, 1)
-    out.intra.bat[,10] <- subdiag(betadiv$Brich, 1)
-    
-    if (j == 1) {
-      out.intra.bat.ally <- out.intra.bat
-    } else {
-      out.intra.bat.ally <- out.intra.bat.ally %>%
-        bind_rows(out.intra.bat)
-    } 
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls[[(yi+1)-p]] <- ps
   }
+  lags <- melt(yi_ls)
+  
+  betadiv <- beta(mi[,8:ncol(mi)], abund = TRUE, raref = 0)
+  out.bout.bat <- matrix(NA, nrow(lags), 8)
+  out.bout.bat <- as.data.frame(out.bout.bat)
+  jacc <- as.matrix(betadiv$Btotal)
+  jacc[upper.tri(jacc)] <- NA
+  diag(jacc) <- NA
+  jacc <- melt(jacc)
+  jacc <- jacc[complete.cases(jacc),]
+  
+  jaccrepl <- as.matrix(betadiv$Brepl)
+  jaccrepl[upper.tri(jaccrepl)] <- NA
+  diag(jaccrepl) <- NA
+  jaccrepl <- melt(jaccrepl)
+  jaccrepl <- jaccrepl[complete.cases(jaccrepl),]
+  
+  jaccrich <- as.matrix(betadiv$Brich)
+  jaccrich[upper.tri(jaccrich)] <- NA
+  diag(jaccrich) <- NA
+  jaccrich <- melt(jaccrich)
+  jaccrich <- jaccrich[complete.cases(jaccrich),]
+  
+  out.bout.bat[,1] <- c(domain)
+  out.bout.bat[,2] <- sites.id[i]
+  out.bout.bat[,3] <- lat
+  out.bout.bat[,4] <- lon
+  out.bout.bat[,5] <- lags[,1]
+  out.bout.bat[,6] <- jacc[,3]
+  out.bout.bat[,7] <- jaccrepl[,3]
+  out.bout.bat[,8] <- jaccrich[,3]
   
   if (i == 1) {
-    out.intra.bat.all <- out.intra.bat.ally
+    out.bout.bat.all <- out.bout.bat
   } else {
-    out.intra.bat.all <- out.intra.bat.all %>%
-      bind_rows(out.intra.bat.ally)
-  } 
-}
-
-
-colnames(out.intra.bat.all) <- c("domainID","siteID","lat","lon","year","bout_from","bout_to","bout_jacc","bout_jaccrepl","bout_jaccrich")
-out.intra.bat.all <- out.intra.bat.all %>%
-  mutate(year = as.numeric(year))
-saveRDS(out.intra.bat.all, file="data/fish_outBAT-bout.rds")
-
-
-### Inter-annual (i.e., across year) change in community composition
-for (i in 1:length(sites.id)){
-  mi <- data.fish.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  betadiv <- beta(mi[,6:ncol(mi)], abund = TRUE, raref = 0)
-  out.inter.bat <- matrix(NA, (nrow(mi)-1), 9)
-  out.inter.bat <- as.data.frame(out.inter.bat)
-  out.inter.bat[,1] <- c(domain)
-  out.inter.bat[,2] <- sites.id[i]
-  out.inter.bat[,3] <- lat
-  out.inter.bat[,4] <- lon
-  out.inter.bat[,5] <- yi[1:(length(yi)-1)]
-  out.inter.bat[,6] <- yi[2:length(yi)]
-  out.inter.bat[,7] <- subdiag(betadiv$Btotal, 1)
-  out.inter.bat[,8] <- subdiag(betadiv$Brepl, 1)
-  out.inter.bat[,9] <- subdiag(betadiv$Brich, 1)
-  
-  if (i == 1) {
-    out.inter.bat.all <- out.inter.bat
-  } else {
-    out.inter.bat.all <- out.inter.bat.all %>%
-      bind_rows(out.inter.bat)
+    out.bout.bat.all <- out.bout.bat.all %>%
+      bind_rows(out.bout.bat)
   }
 }
 
-colnames(out.inter.bat.all) <- c("domainID","siteID","lat","lon","year_from","year_to","year_jacc","year_jaccrepl","year_jaccrich")
-saveRDS(out.inter.bat.all, file="data/fish_outBAT-year.rds")
-
+colnames(out.bout.bat.all) <- c("domainID","siteID","lat","lon","bout_lag","bout_consec_jacc","bout_consec_jaccrepl","bout_consec_jaccrich")
+out.bout.bat.all <- out.bout.bat.all %>% 
+  mutate(bout_consec_contr_jaccrepl = bout_consec_jaccrepl/bout_consec_jacc, bout_consec_contr_jaccrich = bout_consec_jaccrich/bout_consec_jacc)
+saveRDS(out.bout.bat.all, file="data/fish_outBAT-bout-consecutive-all.rds")
 
 
 ###### Community change: Package codyn
+### pair-wise comparisons
 mean.coord <- data.fish.bout %>%
   group_by(domainID, siteID) %>%
   summarize(lat = mean(lat), lon = mean(lon, na.rm=TRUE)) 
@@ -601,209 +531,192 @@ mean.coord <- data.fish.bout %>%
 data.fish.bout.piv <- data.fish.bout %>%
   pivot_longer(-c(domainID, siteID, lat, lon, year, month, bout), names_to = "scientificName", values_to = "abundance") 
 
-data.fish.year.piv <- data.fish.year %>%
-  pivot_longer(-c(domainID, siteID, lat, lon, year), names_to = "scientificName", values_to = "abundance") 
 
-### Intra-annual (i.e., across bout) change in community composition
-out.intra.codyn <- RAC_change(data.fish.bout.piv, 
-                              time.var = "bout", species.var = "scientificName",
-                              abundance.var = "abundance", replicate.var = "siteID") %>%
-  #remove bout comparisons that cross years
-  filter(substr(bout, 1, 4) == substr(bout2, 1, 4)) %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(bout_from = bout, bout_to = bout2, year = as.numeric(substr(bout_from, start = 1, stop = 4))) %>%
-  select(domainID, siteID, lat, lon, year, bout_from, bout_to, richness_change, evenness_change, rank_change, gains, losses)
+siteids <- unique(data.fish.bout.piv$siteID)
 
-saveRDS(out.intra.codyn, file="data/fish_outCodyn-bout.rds")
+for (i in 1:length(siteids)){
+  sel.site <- data.fish.bout.piv %>% 
+    filter(siteID == siteids[i]) %>% 
+    arrange(year,month)
+  
+  sel.time <- unique(sel.site$bout)
+  sel.time <- as.data.frame(cbind(sel.time, seq(1,length(sel.time),1)))
+  colnames(sel.time) <- c("bout","bout_no")
+  sel.time$bout_no <- as.numeric(as.character(sel.time$bout_no))
+  sel.site <- sel.site %>% left_join(sel.time, by="bout")
+  yi <- nrow(sel.time)
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(p,yi,1)
+    yi_ls[[p]] <- ps
+  }
+  
+  for (j in 1:(yi-1)){
+    sel.site.j <- sel.site %>% filter(bout_no %in% yi_ls[[j]])
+    ref.time <- as.numeric(yi_ls[[j]][1])
+    out.intra.codyn <- RAC_change(sel.site.j, 
+                                  time.var = "bout_no", reference.time = ref.time, species.var = "scientificName",
+                                  abundance.var = "abundance", replicate.var = "siteID") %>%
+      #remove bout comparisons that cross years
+      mutate(bout_lag = bout_no2-bout_no) %>%
+      left_join(mean.coord, by="siteID") %>%
+      select(domainID, siteID, lat, lon, bout_no, bout_no2, bout_lag, richness_change, evenness_change, rank_change, gains, losses)
+    
+    if (j == 1) {
+      out.intra.codyn.all <- out.intra.codyn
+    } else {
+      out.intra.codyn.all <- out.intra.codyn.all %>%
+        bind_rows(out.intra.codyn)
+    }}
+  
+  if (i == 1) {
+    out.intra.codyn.cons.all <- out.intra.codyn.all
+  } else {
+    out.intra.codyn.cons.all <- out.intra.codyn.cons.all %>%
+      bind_rows(out.intra.codyn.all)
+  }}
 
-### Inter-annual (i.e., across year) change in community composition
-out.inter.codyn <- RAC_change(data.fish.year.piv, 
-                              time.var = "year", species.var = "scientificName",
-                              abundance.var = "abundance", replicate.var = "siteID") %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(year_from = year, year_to = year2) %>%
-  select(domainID, siteID, lat, lon, year_from, year_to, richness_change, evenness_change, rank_change, gains, losses)
-
-saveRDS(out.inter.codyn, file="data/fish_outCodyn-year.rds")
+saveRDS(out.intra.codyn.cons.all, file="data/fish_outCodyn-bout-consecutive-all.rds")
 
 
+########read in all data 
+stab.bout.cons.all <- readRDS(file="data/fish_outStability-bout-consecutive-all.rds")
+stab.bout.cons.all$bout_lag <- as.numeric(stab.bout.cons.all$bout_lag)
+bat.bout.cons.all <- readRDS(file="data/fish_outBAT-bout-consecutive-all.rds")
+bat.bout.cons.all$bout_lag <- as.numeric(bat.bout.cons.all$bout_lag)
+codyn.bout.cons.all <- readRDS(file="data/fish_outCodyn-bout-consecutive-all.rds")
+codyn.bout.cons.all$bout_lag <- as.numeric(codyn.bout.cons.all$bout_lag)
 
+all.bout.cons.all <- cbind(stab.bout.cons.all, bat.bout.cons.all[,6:ncol(bat.bout.cons.all)], codyn.bout.cons.all[,8:ncol(codyn.bout.cons.all)])
+saveRDS(all.bout.cons.all, file="data/fish_outAll-bout-consecutive-all.rds")
 
 
 
 ################### aquatic macroinvertebrates
 data.macroinv.bout <- readRDS(file="data/macroinv_abund-bout.rds")
-data.macroinv.year <- readRDS(file="data/macroinv_abund-year.rds")
 sites.id <- unique(data.macroinv.bout$siteID)
 
-###### Ecosystem stability
-### Intra-annual (i.e., across bouts, within a year) stability in community abundance
+###### Community stability
+### Pair-wise community stability at bout-resolution
 for (i in 1:length(sites.id)){
   mi <- data.macroinv.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq((p+1),(yi+1),1)
+    yi_ls[[p]] <- ps
+  }
+  yi_vec <- seq(2,(yi+1),1)
+  yi_ls2 <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls2[[(yi+1)-p]] <- ps
+  }
+  yi_vec2 <- seq(1,yi,1)
   
-  out.intra.stab <- matrix(NA, length(yi), 7)
-  out.intra.stab <- as.data.frame(out.intra.stab)
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-    cv <- sd(apply(mij[,8:ncol(mij)],1,sum))/mean(apply(mij[,8:ncol(mij)],1,sum))
-    stab <- 1/cv
-    out.intra.stab[j,1] <- c(domain)
-    out.intra.stab[j,2] <- sites.id[i]
-    out.intra.stab[j,3] <- lat
-    out.intra.stab[j,4] <- lon
-    out.intra.stab[j,5] <- yi[j]
-    out.intra.stab[j,6] <- cv
-    out.intra.stab[j,7] <- stab
-  } 
+  
+  for (k in 1:(nrow(mi)-1)){
+    mik <- mi[k:nrow(mi),]
+    yik <- nrow(mik)-1
+    yik_vec <- seq(2,(yik+1),1)
+    out.intra.stab <- matrix(NA, yik, 7)
+    out.intra.stab <- as.data.frame(out.intra.stab)
+    for (j in 1:length(yik_vec)){
+      mikj <- mik[1:yik_vec[j],]
+      
+      cv <- sd(apply(mikj[,8:ncol(mikj)],1,sum))/mean(apply(mikj[,8:ncol(mikj)],1,sum))
+      stab <- 1/cv
+      out.intra.stab[j,1] <- c(domain)
+      out.intra.stab[j,2] <- sites.id[i]
+      out.intra.stab[j,3] <- lat
+      out.intra.stab[j,4] <- lon
+      out.intra.stab[j,5] <- yi_ls2[[k]][j]
+      out.intra.stab[j,6] <- cv
+      out.intra.stab[j,7] <- stab
+    }
+    if (k == 1) {
+      out.intra.stab.all <- out.intra.stab
+    } else {
+      out.intra.stab.all <- out.intra.stab.all %>%
+        bind_rows(out.intra.stab)
+    }} 
   
   if (i == 1) {
-    out.intra.stab.all <- out.intra.stab
+    out.intra.stab.consecutive <- out.intra.stab.all
   } else {
-    out.intra.stab.all <- out.intra.stab.all %>%
-      bind_rows(out.intra.stab)
-  } 
-}
+    out.intra.stab.consecutive <- out.intra.stab.consecutive %>%
+      bind_rows(out.intra.stab.all)
+  }}
 
-colnames(out.intra.stab.all) <- c("domainID","siteID","lat", "lon", "year","bout_cv","bout_stability")
-out.intra.stab.all <- out.intra.stab.all %>%
-  mutate(year = as.numeric(year))
-saveRDS(out.intra.stab.all, file="data/macroinv_outStability-bout.rds")
-
-
-### Inter-annual (i.e., across years) stability in community abundance
-out.inter.stab <- matrix(NA, length(sites.id), 6)
-out.inter.stab <- as.data.frame(out.inter.stab)
-
-for (i in 1:length(sites.id)){
-  mi <- data.macroinv.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  
-  cv <- sd(apply(mi[,6:ncol(mi)],1,sum))/mean(apply(mi[,6:ncol(mi)],1,sum))
-  stab <- 1/cv
-  out.inter.stab[i,1] <- c(domain)
-  out.inter.stab[i,2] <- sites.id[i]
-  out.inter.stab[i,3] <- lat
-  out.inter.stab[i,4] <- lon
-  out.inter.stab[i,5] <- cv
-  out.inter.stab[i,6] <- stab
-}
-
-colnames(out.inter.stab) <- c("domainID","siteID","lat", "lon", "year_cv","year_stability")
-saveRDS(out.inter.stab, file="data/macroinv_outStability-year.rds")
-
+colnames(out.intra.stab.consecutive) <- c("domainID","siteID","lat", "lon", "bout_lag","bout_cv","bout_stability")
+saveRDS(out.intra.stab.consecutive, file="data/macroinv_outStability-bout-consecutive-all.rds")
 
 
 ###### Community change: Package BAT
-### Function to retrieve the diagonal of a distance matrix
-### courtesy of https://stackoverflow.com/questions/39231961/extract-diagonals-from-a-distance-matrix-in-r
-### retain only diagonal because we only want boout-to-boout and year-to-year comparison not all pair-wise combinations, to avoid biases associated with length of time series
-subdiag <- function (dist_obj, d) {
-  if (!inherits(dist_obj, "dist")) stop("please provide a 'dist' object!")
-  n <- attr(dist_obj, "Size")
-  if (d < 1 || d > (n - 1)) stop(sprintf("'d' needs be between 1 and %d", n - 1L))
-  j_1 <- c(0, seq.int(from = n - 1, by = -1, length = n - d - 1))
-  subdiag_ind <- d + cumsum(j_1)
-  dist_obj[subdiag_ind]
-}
-
-
-### Intra-annual (i.e., across bouts) change in community composition
+### Pair-wise comparisons
 for (i in 1:length(sites.id)){
   mi <- data.macroinv.bout %>%
     filter(siteID == sites.id[i])
   domain <- unique(mi$domainID)
   lat <- mean(mi$lat)
   lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  for (j in 1:length(yi)){
-    mij <- mi %>%
-      filter(year == yi[j])
-    
-    out.intra.bat <- matrix(NA, (nrow(mij)-1), 10)
-    out.intra.bat <- as.data.frame(out.intra.bat)
-    out.intra.bat[,1] <- c(domain)
-    out.intra.bat[,2] <- sites.id[i]
-    out.intra.bat[,3] <- lat
-    out.intra.bat[,4] <- lon
-    out.intra.bat[,5] <- yi[j]
-    betadiv <- beta(mij[,8:ncol(mij)], abund = TRUE, raref = 0)
-    bouts <- mij[,7]
-    out.intra.bat[,6] <- bouts[1:(nrow(bouts)-1),] #bout 1
-    out.intra.bat[,7] <- bouts[2:nrow(bouts),] #bout 2
-    out.intra.bat[,8] <- subdiag(betadiv$Btotal, 1)
-    out.intra.bat[,9] <- subdiag(betadiv$Brepl, 1)
-    out.intra.bat[,10] <- subdiag(betadiv$Brich, 1)
-    
-    if (j == 1) {
-      out.intra.bat.ally <- out.intra.bat
-    } else {
-      out.intra.bat.ally <- out.intra.bat.ally %>%
-        bind_rows(out.intra.bat)
-    } 
+  yi <- nrow(mi)-1
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(1,p,1)
+    yi_ls[[(yi+1)-p]] <- ps
   }
+  lags <- melt(yi_ls)
+  
+  betadiv <- beta(mi[,8:ncol(mi)], abund = TRUE, raref = 0)
+  out.bout.bat <- matrix(NA, nrow(lags), 8)
+  out.bout.bat <- as.data.frame(out.bout.bat)
+  jacc <- as.matrix(betadiv$Btotal)
+  jacc[upper.tri(jacc)] <- NA
+  diag(jacc) <- NA
+  jacc <- melt(jacc)
+  jacc <- jacc[complete.cases(jacc),]
+  
+  jaccrepl <- as.matrix(betadiv$Brepl)
+  jaccrepl[upper.tri(jaccrepl)] <- NA
+  diag(jaccrepl) <- NA
+  jaccrepl <- melt(jaccrepl)
+  jaccrepl <- jaccrepl[complete.cases(jaccrepl),]
+  
+  jaccrich <- as.matrix(betadiv$Brich)
+  jaccrich[upper.tri(jaccrich)] <- NA
+  diag(jaccrich) <- NA
+  jaccrich <- melt(jaccrich)
+  jaccrich <- jaccrich[complete.cases(jaccrich),]
+  
+  out.bout.bat[,1] <- c(domain)
+  out.bout.bat[,2] <- sites.id[i]
+  out.bout.bat[,3] <- lat
+  out.bout.bat[,4] <- lon
+  out.bout.bat[,5] <- lags[,1]
+  out.bout.bat[,6] <- jacc[,3]
+  out.bout.bat[,7] <- jaccrepl[,3]
+  out.bout.bat[,8] <- jaccrich[,3]
   
   if (i == 1) {
-    out.intra.bat.all <- out.intra.bat.ally
+    out.bout.bat.all <- out.bout.bat
   } else {
-    out.intra.bat.all <- out.intra.bat.all %>%
-      bind_rows(out.intra.bat.ally)
-  } 
-}
-
-
-colnames(out.intra.bat.all) <- c("domainID","siteID","lat","lon","year","bout_from","bout_to","bout_jacc","bout_jaccrepl","bout_jaccrich")
-out.intra.bat.all <- out.intra.bat.all %>%
-  mutate(year = as.numeric(year))
-saveRDS(out.intra.bat.all, file="data/macroinv_outBAT-bout.rds")
-
-
-### Inter-annual (i.e., across year) change in community composition
-for (i in 1:length(sites.id)){
-  mi <- data.macroinv.year %>%
-    filter(siteID == sites.id[i])
-  domain <- unique(mi$domainID)
-  lat <- mean(mi$lat)
-  lon <- mean(mi$lon)
-  yi <- unique(mi$year)
-  
-  betadiv <- beta(mi[,6:ncol(mi)], abund = TRUE, raref = 0)
-  out.inter.bat <- matrix(NA, (nrow(mi)-1), 9)
-  out.inter.bat <- as.data.frame(out.inter.bat)
-  out.inter.bat[,1] <- c(domain)
-  out.inter.bat[,2] <- sites.id[i]
-  out.inter.bat[,3] <- lat
-  out.inter.bat[,4] <- lon
-  out.inter.bat[,5] <- yi[1:(length(yi)-1)]
-  out.inter.bat[,6] <- yi[2:length(yi)]
-  out.inter.bat[,7] <- subdiag(betadiv$Btotal, 1)
-  out.inter.bat[,8] <- subdiag(betadiv$Brepl, 1)
-  out.inter.bat[,9] <- subdiag(betadiv$Brich, 1)
-  
-  if (i == 1) {
-    out.inter.bat.all <- out.inter.bat
-  } else {
-    out.inter.bat.all <- out.inter.bat.all %>%
-      bind_rows(out.inter.bat)
+    out.bout.bat.all <- out.bout.bat.all %>%
+      bind_rows(out.bout.bat)
   }
 }
 
-colnames(out.inter.bat.all) <- c("domainID","siteID","lat","lon","year_from","year_to","year_jacc","year_jaccrepl","year_jaccrich")
-saveRDS(out.inter.bat.all, file="data/macroinv_outBAT-year.rds")
-
-
+colnames(out.bout.bat.all) <- c("domainID","siteID","lat","lon","bout_lag","bout_consec_jacc","bout_consec_jaccrepl","bout_consec_jaccrich")
+out.bout.bat.all <- out.bout.bat.all %>% 
+  mutate(bout_consec_contr_jaccrepl = bout_consec_jaccrepl/bout_consec_jacc, bout_consec_contr_jaccrich = bout_consec_jaccrich/bout_consec_jacc)
+saveRDS(out.bout.bat.all, file="data/macroinv_outBAT-bout-consecutive-all.rds")
 
 ###### Community change: Package codyn
+###pair-wise comparisons
 mean.coord <- data.macroinv.bout %>%
   group_by(domainID, siteID) %>%
   summarize(lat = mean(lat), lon = mean(lon, na.rm=TRUE)) 
@@ -811,34 +724,62 @@ mean.coord <- data.macroinv.bout %>%
 data.macroinv.bout.piv <- data.macroinv.bout %>%
   pivot_longer(-c(domainID, siteID, lat, lon, year, month, bout), names_to = "scientificName", values_to = "abundance") 
 
-data.macroinv.year.piv <- data.macroinv.year %>%
-  pivot_longer(-c(domainID, siteID, lat, lon, year), names_to = "scientificName", values_to = "abundance") 
+siteids <- unique(data.macroinv.bout.piv$siteID)
 
-### Intra-annual (i.e., across bout) change in community composition
-out.intra.codyn <- RAC_change(data.macroinv.bout.piv, 
-                              time.var = "bout", species.var = "scientificName",
-                              abundance.var = "abundance", replicate.var = "siteID") %>%
-  #remove bout comparisons that cross years
-  filter(substr(bout, 1, 4) == substr(bout2, 1, 4)) %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(bout_from = bout, bout_to = bout2, year = as.numeric(substr(bout_from, start = 1, stop = 4))) %>%
-  select(domainID, siteID, lat, lon, year, bout_from, bout_to, richness_change, evenness_change, rank_change, gains, losses)
+for (i in 1:length(siteids)){
+  sel.site <- data.macroinv.bout.piv %>% 
+    filter(siteID == siteids[i]) %>% 
+    arrange(year,month)
+  
+  sel.time <- unique(sel.site$bout)
+  sel.time <- as.data.frame(cbind(sel.time, seq(1,length(sel.time),1)))
+  colnames(sel.time) <- c("bout","bout_no")
+  sel.time$bout_no <- as.numeric(as.character(sel.time$bout_no))
+  sel.site <- sel.site %>% left_join(sel.time, by="bout")
+  yi <- nrow(sel.time)
+  yi_ls <- list()
+  for (p in 1:yi){
+    ps <- seq(p,yi,1)
+    yi_ls[[p]] <- ps
+  }
+  
+  for (j in 1:(yi-1)){
+    sel.site.j <- sel.site %>% filter(bout_no %in% yi_ls[[j]])
+    ref.time <- as.numeric(yi_ls[[j]][1])
+    out.intra.codyn <- RAC_change(sel.site.j, 
+                                  time.var = "bout_no", reference.time = ref.time, species.var = "scientificName",
+                                  abundance.var = "abundance", replicate.var = "siteID") %>%
+      #remove bout comparisons that cross years
+      mutate(bout_lag = bout_no2-bout_no) %>%
+      left_join(mean.coord, by="siteID") %>%
+      select(domainID, siteID, lat, lon, bout_no, bout_no2, bout_lag, richness_change, evenness_change, rank_change, gains, losses)
+    
+    if (j == 1) {
+      out.intra.codyn.all <- out.intra.codyn
+    } else {
+      out.intra.codyn.all <- out.intra.codyn.all %>%
+        bind_rows(out.intra.codyn)
+    }}
+  
+  if (i == 1) {
+    out.intra.codyn.cons.all <- out.intra.codyn.all
+  } else {
+    out.intra.codyn.cons.all <- out.intra.codyn.cons.all %>%
+      bind_rows(out.intra.codyn.all)
+  }}
 
-saveRDS(out.intra.codyn, file="data/macroinv_outCodyn-bout.rds")
+saveRDS(out.intra.codyn.cons.all, file="data/macroinv_outCodyn-bout-consecutive-all.rds")
 
-### Inter-annual (i.e., across year) change in community composition
-out.inter.codyn <- RAC_change(data.macroinv.year.piv, 
-                              time.var = "year", species.var = "scientificName",
-                              abundance.var = "abundance", replicate.var = "siteID") %>%
-  left_join(mean.coord, by="siteID") %>%
-  mutate(year_from = year, year_to = year2) %>%
-  select(domainID, siteID, lat, lon, year_from, year_to, richness_change, evenness_change, rank_change, gains, losses)
+########read in all data 
+stab.bout.cons.all <- readRDS(file="data/macroinv_outStability-bout-consecutive-all.rds")
+stab.bout.cons.all$bout_lag <- as.numeric(stab.bout.cons.all$bout_lag)
+bat.bout.cons.all <- readRDS(file="data/macroinv_outBAT-bout-consecutive-all.rds")
+bat.bout.cons.all$bout_lag <- as.numeric(bat.bout.cons.all$bout_lag)
+codyn.bout.cons.all <- readRDS(file="data/macroinv_outCodyn-bout-consecutive-all.rds")
+codyn.bout.cons.all$bout_lag <- as.numeric(codyn.bout.cons.all$bout_lag)
 
-saveRDS(out.inter.codyn, file="data/macroinv_outCodyn-year.rds")
-
-
-
-
+all.bout.cons.all <- cbind(stab.bout.cons.all, bat.bout.cons.all[,6:ncol(bat.bout.cons.all)], codyn.bout.cons.all[,8:ncol(codyn.bout.cons.all)])
+saveRDS(all.bout.cons.all, file="data/macroinv_outAll-bout-consecutive-all.rds")
 
 
 
